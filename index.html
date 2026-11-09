@@ -3,12 +3,13 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b1018"><meta name="description" content="A股透明量化观察器：趋势、活跃度与风险评分">
-  <title>量化观察器 · A股候选扫描</title><link rel="stylesheet" href="quant.css">
+  <title>量化观察器 · A股候选扫描</title><link rel="stylesheet" href="quant.css?v=auction2">
 </head>
 <body>
   <main class="wrap">
     <header><div><p class="eyebrow">QUANT LENS / A-SHARES</p><h1>量化观察器</h1><p class="sub">用可解释的规则扫描候选股，不预测涨跌，不自动交易。</p></div><button id="refresh">↻ 刷新行情</button></header>
     <section class="card lookup top-lookup"><div class="lookup-row"><div><p class="eyebrow">个股查询</p><p class="muted">搜索行情、估值、资金流向和技术指标</p></div><form id="lookupForm"><input id="stockSearch" autocomplete="off" placeholder="输入股票名称或代码，如 贵州茅台 / 600519"><button type="submit">查询</button></form></div><div id="suggestions" class="suggestions" hidden></div><div id="stockDetail" class="detail-empty">输入股票名称或代码开始查询</div></section>
+    <section class="card auction"><div class="cardhead"><div><p class="eyebrow">PRE-OPEN AUCTION SCAN</p><h2>盘前竞价候选</h2><p class="muted">沪深主板 · 竞价涨幅、成交额、换手与距涨停价空间综合排序。</p></div><div class="limit-actions"><span id="auctionUpdated">等待竞价时段</span><button id="auctionRefresh">刷新扫描</button></div></div><div class="auction-phase" id="auctionPhase">集合竞价 09:15–09:25；09:15–09:20 委托可撤，信号噪声较大。</div><div class="tablewrap"><table><thead><tr><th>股票</th><th>观察分</th><th>竞价涨幅</th><th>竞价成交额</th><th>竞价换手</th><th>距涨停</th><th>观察信号</th></tr></thead><tbody id="auctionRows"><tr><td colspan="7" class="zt-empty">交易日 09:15–09:25 更新</td></tr></tbody></table></div><div id="auctionMobile" class="mobile-list"></div><div class="flow-note">信号按竞价涨幅、成交活跃度和距涨停价计算，不是涨停预测。09:15–09:20 的挂单可撤，竞价金额和涨幅可能快速变化；仅用竞价前实时数据不能可靠判断能否涨停。</div></section>
     <section class="notice"><b>观察信号，不是买入建议</b><span>行情来自腾讯公开报价，可能延迟；首版覆盖沪深主板代表股，评分是盘中快照规则，不等同完整历史回测。</span></section>
     <section class="toolbar"><div class="tabs"><button class="active" data-preset="balanced">均衡趋势</button><button data-preset="momentum">强势活跃</button><button data-preset="defensive">稳健流动</button></div><label>行业筛选 <select id="sector"><option value="all">全部行业</option></select></label><label>最低成交额 <select id="amount"><option value="0">不限</option><option value="100000000">1亿元</option><option value="500000000">5亿元</option></select></label></section>
     <section class="stats" id="stats"></section>
@@ -17,6 +18,6 @@
     <section class="card guide"><div><p class="eyebrow">SCORING LOGIC</p><h2>评分怎么来</h2></div><div class="logic"><article><b>趋势代理 · 40%</b><p>当日涨幅处于温和正区间得分较高；大幅冲高会触发追高扣分。</p></article><article><b>活跃度 · 35%</b><p>量比与成交额反映当日参与度；单看放量不代表资金持续流入。</p></article><article><b>流动性 · 25%</b><p>成交额和换手率用于区分可观察标的与低流动性标的。</p></article></div></section>
     <footer>数据源：腾讯行情 · 刷新时读取公开行情接口。红涨绿跌。量化观察结果仅供学习研究，不构成投资建议。</footer>
   </main>
-  <script src="market-data.js"></script><script src="quant.js"></script><script src="lookup.js"></script><script src="limitup-v2.js"></script>
+  <script src="market-data.js"></script><script src="quant.js"></script><script src="lookup.js"></script><script src="auction.js"></script><script src="limitup-v2.js"></script>
 </body></html>
 
