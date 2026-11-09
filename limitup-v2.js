@@ -3,6 +3,7 @@
   const state = { pool: "zt", rows: [], filter: "all", sort: "board" };
   const compact = (n) => new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(Number(n) || 0);
   const time = (n) => { const s = String(n || "").padStart(6, "0"); return `${s.slice(0, 2)}:${s.slice(2, 4)}:${s.slice(4)}`; };
+  const clue = (x) => { const link = `https://so.eastmoney.com/news/s?keyword=${encodeURIComponent(`${x.n} ${x.c} 涨停`)}`; const tag = x.hybk || "行业待补"; const boards = x.zttj?.days ? ` · ${x.zttj.days}天${x.zttj.ct}板` : ""; return `<span>${tag}${boards}</span> <a class="reason-link" href="${link}" target="_blank" rel="noopener">查资讯 ↗</a>`; };
   function render() {
     let rows = [...state.rows];
     if (state.pool === "zt" && state.filter === "first") rows = rows.filter((x) => +x.lbc === 1);
@@ -12,9 +13,9 @@
     const pct = (x) => +x.zdp || 0;
     const label = (x) => broken ? `${x.zbc ?? 0} 次炸板` : `${x.lbc || 1} 连板`;
     $("ztBoardHeading").textContent = broken ? "炸板次数" : "连板";
-    const rowHtml = rows.map((x) => `<tr><td class="zt-row-main"><b>${x.n}</b><small>${x.c}</small></td><td><b>${label(x)}</b><small>${x.zttj?.days ? `${x.zttj.days}天${x.zttj.ct}板` : ""}</small></td><td class="${pct(x) >= 0 ? "up" : "down"}">${pct(x) > 0 ? "+" : ""}${pct(x).toFixed(2)}%</td><td>${time(x.fbt)}</td><td>${broken ? "—" : compact(x.fund)}</td><td>${x.zbc ?? "—"}次</td><td>${x.hybk || "—"}</td><td>${compact(x.amount)}</td></tr>`).join("");
-    $("ztRows").innerHTML = rowHtml || `<tr><td colspan="8" class="zt-empty">${state.rows.length ? "当前筛选无股票" : broken ? "今日暂无炸板股" : "今日涨停池为空或数据暂不可用"}</td></tr>`;
-    $("ztMobile").innerHTML = rows.map((x) => `<article class="row"><div class="rowtop"><b>${x.n} <small>${x.c}</small></b><span class="${pct(x) >= 0 ? "up" : "down"}">${pct(x) > 0 ? "+" : ""}${pct(x).toFixed(2)}%</span></div><div class="rowmeta"><span><b>${label(x)}</b></span><span>触板 ${time(x.fbt)}</span><span>${broken ? "" : `封单 ${compact(x.fund)}`}</span></div><div class="why">${x.hybk || "行业待补"} · 成交额 ${compact(x.amount)}</div></article>`).join("") || `<div class="zt-empty">${broken ? "今日暂无炸板股" : "今日涨停池为空"}</div>`;
+    const rowHtml = rows.map((x) => `<tr><td class="zt-row-main"><b>${x.n}</b><small>${x.c}</small></td><td><b>${label(x)}</b><small>${x.zttj?.days ? `${x.zttj.days}天${x.zttj.ct}板` : ""}</small></td><td class="${pct(x) >= 0 ? "up" : "down"}">${pct(x) > 0 ? "+" : ""}${pct(x).toFixed(2)}%</td><td>${time(x.fbt)}</td><td>${broken ? "—" : compact(x.fund)}</td><td>${x.zbc ?? "—"}次</td><td>${x.hybk || "—"}</td><td>${compact(x.amount)}</td><td class="cause">${clue(x)}</td></tr>`).join("");
+    $("ztRows").innerHTML = rowHtml || `<tr><td colspan="9" class="zt-empty">${state.rows.length ? "当前筛选无股票" : broken ? "今日暂无炸板股" : "今日涨停池为空或数据暂不可用"}</td></tr>`;
+    $("ztMobile").innerHTML = rows.map((x) => `<article class="row"><div class="rowtop"><b>${x.n} <small>${x.c}</small></b><span class="${pct(x) >= 0 ? "up" : "down"}">${pct(x) > 0 ? "+" : ""}${pct(x).toFixed(2)}%</span></div><div class="rowmeta"><span><b>${label(x)}</b></span><span>触板 ${time(x.fbt)}</span><span>${broken ? "" : `封单 ${compact(x.fund)}`}</span></div><div class="why">${clue(x)} · 成交额 ${compact(x.amount)}</div></article>`).join("") || `<div class="zt-empty">${broken ? "今日暂无炸板股" : "今日涨停池为空"}</div>`;
   }
   async function load() {
     const d = new Date(), ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
