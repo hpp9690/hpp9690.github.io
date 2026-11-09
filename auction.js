@@ -39,9 +39,9 @@
   function renderReview() {
     const history = readHistory();
     const items = history.flatMap((d) => d.stocks.map((s) => ({ ...s, date: d.date, capturedAt: d.capturedAt })));
-    const body = items.map((s) => `<tr><td>${s.date}</td><td class="zt-row-main"><b>${s.name}</b><small>${s.code}</small></td><td>${pct(s.auctionPct)} / ${s.score}</td><td class="${s.openPct > 0 ? "up" : s.openPct < 0 ? "down" : ""}">${pct(s.openPct)}</td><td class="${s.lastPct > 0 ? "up" : s.lastPct < 0 ? "down" : ""}">${pct(s.lastPct)}</td><td>${s.sampledAt ? `盘中快照 ${s.sampledAt}` : "等待开盘后行情"}</td></tr>`).join("");
+    const body = items.map((s) => `<tr><td>${s.date}</td><td class="zt-row-main"><b>${s.name}</b><small>${s.code}</small></td><td>${pct(s.auctionPct)} / ${s.score}</td><td class="${s.openPct > 0 ? "up" : s.openPct < 0 ? "down" : ""}">${pct(s.openPct)}</td><td class="${s.lastPct > 0 ? "up" : s.lastPct < 0 ? "down" : ""}">${pct(s.lastPct)}</td><td>${s.sampledAt ? `最近快照 ${s.sampledAt}` : "等待开盘后行情"}</td></tr>`).join("");
     $("reviewRows").innerHTML = body || `<tr><td colspan="6" class="zt-empty">上线后等待交易日 09:24–09:25 自动保存竞价候选</td></tr>`;
-    $("reviewMobile").innerHTML = items.map((s) => `<article class="row"><div class="rowtop"><b>${s.name} <small>${s.code}</small></b><span>${s.date}</span></div><div class="rowmeta"><span>竞价 ${pct(s.auctionPct)} · ${s.score} 分</span><span class="${s.openPct > 0 ? "up" : s.openPct < 0 ? "down" : ""}">开盘 ${pct(s.openPct)}</span></div><div class="why">相对开盘 ${pct(s.lastPct)} · ${s.sampledAt ? `盘中快照 ${s.sampledAt}` : "等待开盘后行情"}</div></article>`).join("") || `<div class="zt-empty">上线后等待交易日 09:24–09:25 自动保存竞价候选</div>`;
+    $("reviewMobile").innerHTML = items.map((s) => `<article class="row"><div class="rowtop"><b>${s.name} <small>${s.code}</small></b><span>${s.date}</span></div><div class="rowmeta"><span>竞价 ${pct(s.auctionPct)} · ${s.score} 分</span><span class="${s.openPct > 0 ? "up" : s.openPct < 0 ? "down" : ""}">开盘 ${pct(s.openPct)}</span></div><div class="why">相对开盘 ${pct(s.lastPct)} · ${s.sampledAt ? `最近快照 ${s.sampledAt}` : "等待开盘后行情"}</div></article>`).join("") || `<div class="zt-empty">上线后等待交易日 09:24–09:25 自动保存竞价候选</div>`;
     if (!history.length) $("reviewStatus").textContent = "候选快照只保存在当前浏览器";
   }
   let lastQuoteAt = 0, quoteBusy = false;
