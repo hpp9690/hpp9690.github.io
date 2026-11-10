@@ -72,7 +72,8 @@
     if (minute < 9 * 60 + 30) return ["竞价确认", "保留候选，等待开盘承接，不抢最后一分钟信号", "confirm"];
     if (minute < 11 * 60 + 30) return ["盘中跟踪", "比较开盘承接、封板强度和炸板次数", "live"];
     if (minute < 13 * 60) return ["午间复核", "缩小候选池，复核上午风险信号", "pause"];
-    if (minute < 15 * 60) return ["盘中跟踪", "关注回封、量能和市场情绪变化", "live"];
+    if (minute < 14 * 60 + 57) return ["盘中跟踪", "关注回封、量能和市场情绪变化", "live"];
+    if (minute < 15 * 60) return ["收盘集合竞价", "尾盘撮合阶段，复核真实成交与封单变化", "confirm"];
     return ["收盘复盘", "记录候选表现，为下一交易日准备观察清单", "closed"];
   };
   const updatePhase = () => {
@@ -154,6 +155,7 @@
     renderWatch();
   };
   const countRows = (selector) => [...document.querySelectorAll(selector)].filter((row) => !/暂无|等待|当前筛选|行情暂/.test(row.textContent)).length;
+  let marketHealth = null, lastCoverage = null;
   const updateDeskMetrics = () => {
     const auctionCount = countRows("#auctionRows tr"), ztCount = countRows("#ztRows tr"), candidateCount = countRows("#rows tr");
     $("#visibleSummary").textContent = `竞价 ${auctionCount} · 涨停 ${ztCount} · 候选 ${candidateCount}`;
@@ -161,9 +163,18 @@
     const failed = statuses.filter((text) => /失败|不可用|超时|返回为空/.test(text)).length;
     const ready = statuses.filter((text) => /更新(?:于|\s)|竞价|开盘|复盘|盘中/.test(text)).length;
     const health = $("#dataHealth");
-    health.textContent = failed ? `${failed} 个模块需重试` : ready ? `${ready}/3 数据模块有响应` : "数据载入中";
-    health.className = failed ? "warn" : ready ? "ok" : "";
+    if (marketHealth?.state === "ready") lastCoverage = marketHealth;
+    const scan = marketHealth?.state === "scanning" && lastCoverage ? lastCoverage : marketHealth;
+    const ratio = scan?.total ? scan.scanned / scan.total : 0;
+    const age = scan?.capturedAt ? Math.round((Date.now() - scan.capturedAt) / 1000) : 0;
+    if (marketHealth?.state === "error") health.textContent = `全市场扫描失败 · ${lastCoverage ? `上次覆盖 ${lastCoverage.scanned}/${lastCoverage.total}` : "等待重试"}`;
+    else if (scan?.state === "ready") health.textContent = `全市场 ${scan.scanned}/${scan.total} (${Math.round(ratio * 100)}%)${scan.missingPages ? ` · 缺 ${scan.missingPages} 页` : ""}${age > 180 ? ` · ${Math.round(age / 60)} 分钟前` : ""}`;
+    else health.textContent = marketHealth?.state === "scanning" ? "全市场扫描中" : failed ? `${failed} 个模块需重试` : ready ? `${ready}/3 数据模块有响应` : "数据载入中";
+    const active = ["live", "confirm"].includes(phaseMap()[2]);
+    health.className = marketHealth?.state === "error" || (scan?.state === "ready" && (ratio < .9 || (active && age > 180) || scan.date !== new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }))) ? "warn" : scan?.state === "ready" || ready ? "ok" : "";
   };
+  document.addEventListener("quant:market-health", (event) => { marketHealth = event.detail; updateDeskMetrics(); });
+  setInterval(updateDeskMetrics, 15000);
   const dataRoots = ["auctionRows", "auctionMobile", "ztRows", "ztMobile", "rows", "mobile", "auctionUpdated", "ztUpdated", "updated", "error"].map((id) => document.getElementById(id)).filter(Boolean);
   const rowObserver = new MutationObserver(() => { decorateRows(); updateDeskMetrics(); });
   dataRoots.forEach((root) => rowObserver.observe(root, { childList: true, subtree: true, characterData: true }));
