@@ -207,7 +207,7 @@
   canvas.addEventListener("pointerleave", () => { tip.hidden = true; });
   document.addEventListener("quant:market-snapshot", (event) => {
     const next = event.detail;
-    if (!next?.stocks?.length) return;
+    if (!next?.stocks?.length || next.partial) return;
     const incomingCoverage = Number(next.total) ? Number(next.scanned) / Number(next.total) : 0;
     const previousCoverage = snapshot?.total ? snapshot.scanned / snapshot.total : 0;
     const updated = $("#heatmapUpdated");
