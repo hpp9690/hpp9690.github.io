@@ -11,6 +11,9 @@
     ((t.minutes >= 555 && t.minutes < 565) || (t.minutes >= 570 && t.minutes <= 690) || (t.minutes >= 780 && t.minutes <= 900));
   const shell = document.createElement("section");
   shell.className = "anomaly-panel";
+  shell.id = "anomaly";
+  shell.dataset.module = "anomaly";
+  shell.hidden = document.body.dataset.view !== "anomaly";
   shell.setAttribute("aria-label", "异动捕捉");
   shell.innerHTML = `<div class="anomaly-heading"><div><p class="eyebrow">LIVE MOVEMENT RADAR</p><h2>异动捕捉 <span id="anomalyCount">0</span></h2><p id="anomalyState">正在建立连续行情基线</p></div><div class="anomaly-actions"><button type="button" id="anomalyScope" aria-pressed="false">全部股票</button><button type="button" id="anomalySound" aria-pressed="false">声音关闭</button><button type="button" id="anomalyDesktop">桌面提醒</button></div></div><div id="anomalyFeed" class="anomaly-feed" role="log" aria-live="polite" aria-relevant="additions"><div class="anomaly-empty">两次有效快照后，新的拉升、放量、封板和炸板会出现在这里。</div></div><p class="anomaly-foot">页面保持打开时监测；公开行情可能延迟或缺页。异动表示观察事件，不代表买卖点。</p>`;
   ($(".decision-desk") || $(".quick-nav"))?.after(shell);
@@ -130,7 +133,7 @@
     const code = event.target.closest("[data-code]")?.dataset.code;
     if (!code) return;
     const input = $("#stockSearch"), form = $("#lookupForm");
-    if (input && form) { input.value = code; form.requestSubmit(); $("#lookup")?.scrollIntoView({ behavior: "smooth" }); }
+    if (input && form) { document.dispatchEvent(new CustomEvent("quant:open-view", { detail: { id: "lookup" } })); input.value = code; form.requestSubmit(); }
   });
   render(); status(); setInterval(status, 10000);
 })();
