@@ -97,10 +97,14 @@
     try {
       const response = await fetch(url, { cache: "no-store", signal: controller.signal });
       if (!response.ok) throw new Error("quote");
-      return (await response.json()).data?.diff || [];
+      const data = (await response.json()).data;
+      if (!data || !Array.isArray(data.diff)) throw new Error("empty page");
+      return { rows: data.diff, total: Number(data.total) || data.diff.length };
     } finally { clearTimeout(timer); }
   }
+  let loadBusy = false;
   async function load() {
+    if (loadBusy) return;
     const phase = phaseNow();
     if (phase.mode === "pre") {
       $("auctionUpdated").textContent = "竞价尚未开始";
@@ -110,9 +114,17 @@
       return;
     }
     $("auctionUpdated").textContent = "正在扫描多页行情";
+    loadBusy = true;
     try {
-      const pages = await Promise.allSettled([1, 2, 3, 4, 5, 6].map(fetchPage));
-      const raw = pages.flatMap((x) => x.status === "fulfilled" ? x.value : []);
+      const first = await fetchPage(1);
+      const pageCount = Math.min(60, Math.ceil(first.total / 100));
+      const pages = [];
+      for (let start = 2; start <= pageCount; start += 12) {
+        const batch = Array.from({ length: Math.min(12, pageCount - start + 1) }, (_, i) => start + i);
+        pages.push(...await Promise.allSettled(batch.map(fetchPage)));
+      }
+      const raw = first.rows.concat(pages.flatMap((x) => x.status === "fulfilled" ? x.value.rows : []));
+      const failed = pages.filter((x) => x.status === "rejected").length;
       if (!raw.length) throw new Error("empty");
       const deduped = [...new Map(raw.map((x) => [x.f12, x])).values()];
       const sourceDates = deduped.map((x) => +x.f124 || 0).filter(Boolean);
@@ -129,15 +141,21 @@
       let relaxed = false;
       if (!list.length) { list = base.filter((x) => x._scanPct >= 1.5 && x._scanPct <= 10.2 && x._scanAmount >= 5e5); relaxed = true; }
       render(list, effective);
+      document.dispatchEvent(new CustomEvent("quant:market-snapshot", { detail: {
+        date: marketDate, mode: effective.mode, capturedAt: Date.now(), scanned: deduped.length, total: first.total, missingPages: failed,
+        stocks: base.map((x) => ({ code: x.f12, name: x.f14, pct: +x.f3 || 0,
+          amount: +x.f6 || 0, turnover: +x.f8 || 0, price: +x.f2 || 0 }))
+      } }));
       const time = new Date().toLocaleTimeString("zh-CN", { timeZone: zone });
-      $("auctionUpdated").textContent = `${effective.mode === "review" ? marketDate + " 复盘" : "更新 " + time} · 扫描 ${deduped.length} 只 · ${list.length} 个${relaxed ? "宽松" : "严格"}候选`;
+      $("auctionUpdated").textContent = `${effective.mode === "review" ? marketDate + " 复盘" : "更新 " + time} · 扫描 ${deduped.length}/${first.total} 只${failed ? `（${failed} 页缺失）` : ""} · ${list.length} 个${relaxed ? "宽松" : "严格"}候选`;
     } catch {
       $("auctionUpdated").textContent = "行情暂不可用";
       $("auctionRows").innerHTML = `<tr><td colspan="7" class="zt-empty">竞价行情接口暂时不可用，请稍后重试</td></tr>`;
-    }
+    } finally { loadBusy = false; }
   }
   $("auctionRefresh").onclick = load;
   $("reviewRefresh").onclick = () => updateReview(true);
   renderReview(); load(); updateReview();
   setInterval(() => { load(); updateReview(); }, 30000);
 })();
+
