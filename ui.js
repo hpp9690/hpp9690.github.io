@@ -4,6 +4,7 @@
   const findCard = (title) => cards.find((card) => card.querySelector("h2")?.textContent.includes(title));
   const sections = [
     { id: "anomaly", label: "异动捕捉", el: null },
+    { id: "heatmap", label: "市场热力图", el: null },
     { id: "lookup", label: "个股查询", el: $(".top-lookup") },
     { id: "auction", label: "竞价候选", el: $(".auction") },
     { id: "limitup", label: "涨停雷达", el: $(".limitup") },
@@ -39,6 +40,7 @@
     const selected = document.getElementById(id);
     if (selected?.classList.contains("is-collapsed")) selected.querySelector(".section-toggle")?.click();
     if (remember && location.hash !== `#${id}`) history.pushState(null, "", `#${id}`);
+    document.dispatchEvent(new CustomEvent("quant:view-changed", { detail: { id } }));
     if (scroll) nav.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   document.addEventListener("quant:open-view", (event) => activateView(event.detail?.id));
@@ -90,6 +92,7 @@
   const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const saveWatch = () => {
     try { localStorage.setItem(watchKey, JSON.stringify(watched)); } catch {}
+    document.dispatchEvent(new CustomEvent("quant:watchlist-changed"));
   };
   const searchStock = (code) => {
     const input = $("#stockSearch"), form = $("#lookupForm");
@@ -312,6 +315,7 @@
   });
   const viewFromHash = () => location.hash.slice(1);
   activateView(validViews.has(viewFromHash()) ? viewFromHash() : "anomaly", { remember: false, scroll: false });
+  if (validViews.has(viewFromHash())) requestAnimationFrame(() => document.getElementById(viewFromHash())?.scrollIntoView({ block: "start" }));
   addEventListener("popstate", () => activateView(viewFromHash(), { remember: false }));
   addEventListener("hashchange", () => activateView(viewFromHash(), { remember: false }));
 })();
