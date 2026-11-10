@@ -23,3 +23,6 @@ html{scroll-behavior:smooth}.card{scroll-margin-top:84px;transition:border-color
 body.focus-mode .guide[data-module]:not([hidden]){display:block}
 @media(max-width:720px){.quick-nav-inner{display:grid;grid-template-columns:1fr;gap:5px}.quick-links{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;overflow:visible}.quick-links button{min-width:0;white-space:normal;padding:9px 3px;font-size:11px;line-height:1.2}.quick-actions{position:static;display:flex;justify-content:flex-end;gap:5px;border:0;padding:0}.quick-actions button{padding:5px 9px;font-size:10px}.quick-actions #refreshAll{display:inline-block}.decision-desk{margin-top:0}.anomaly-panel{margin-top:0}}
 
+.detail-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}.lookup-watch{padding:8px 11px;border-color:#6c5a32;background:#211f18;color:#f3cf6f;font-size:12px;white-space:nowrap}.lookup-watch:hover,.lookup-watch.active{border-color:#c79c41;background:#3c301b;color:#ffe0a0}
+@media(max-width:720px){.detail-title{align-items:flex-start;gap:10px}.detail-actions{flex-direction:column;align-items:flex-end;gap:6px}.lookup-watch{padding:7px 9px;font-size:11px}}
+
