@@ -8,7 +8,7 @@
     return { date: `${get("year")}-${get("month")}-${get("day")}`, minutes: Number(get("hour")) * 60 + Number(get("minute")), weekday: get("weekday"), time: `${get("hour")}:${get("minute")}` };
   };
   const isMarketTime = (t) => !["Sat", "Sun"].includes(t.weekday) &&
-    ((t.minutes >= 555 && t.minutes < 565) || (t.minutes >= 570 && t.minutes <= 690) || (t.minutes >= 780 && t.minutes <= 900));
+    ((t.minutes >= 555 && t.minutes < 565) || (t.minutes >= 570 && t.minutes < 690) || (t.minutes >= 780 && t.minutes < 897));
   const shell = document.createElement("section");
   shell.className = "anomaly-panel";
   shell.id = "anomaly";
@@ -18,8 +18,9 @@
   shell.innerHTML = `<div class="anomaly-heading"><div><p class="eyebrow">LIVE MOVEMENT RADAR</p><h2>异动捕捉 <span id="anomalyCount">0</span></h2><p id="anomalyState">正在建立连续行情基线</p></div><div class="anomaly-actions"><button type="button" id="anomalyScope" aria-pressed="false">全部股票</button><button type="button" id="anomalySound" aria-pressed="false">声音关闭</button><button type="button" id="anomalyDesktop">桌面提醒</button></div></div><div id="anomalyFeed" class="anomaly-feed" role="log" aria-live="polite" aria-relevant="additions"><div class="anomaly-empty">两次有效快照后，新的拉升、放量、封板和炸板会出现在这里。</div></div><p class="anomaly-foot">页面保持打开时监测；公开行情可能延迟或缺页。异动表示观察事件，不代表买卖点。</p>`;
   ($(".decision-desk") || $(".quick-nav"))?.after(shell);
   const title = document.title;
-  let priorMarket = null, priorBoard = null, alerts = [], onlyWatch = false, soundOn = false;
-  let lastMarketAt = 0, lastBoardAt = 0, unread = 0, coverage = "";
+  const priorMarket = new Map();
+  let priorBoard = null, alerts = [], onlyWatch = false, soundOn = false;
+  let lastMarketAt = 0, lastBoardAt = 0, unread = 0, coverage = "", marketHealth = null;
   const cooldown = new Map();
   const dayKey = (date) => `quantLens.anomaly.${date}`;
   const today = clock().date;
@@ -57,11 +58,11 @@
     $("#anomalyFeed").innerHTML = filtered.length ? filtered.map((x) => `<button type="button" class="anomaly-item ${x.level}" data-code="${safe(x.code)}"><span class="anomaly-time">${safe(x.time)}</span><span class="anomaly-name"><b>${safe(x.name)}</b><small>${safe(x.code)}</small></span><span class="anomaly-type">${safe(x.label)}</span><span class="anomaly-detail">${safe(x.detail)}</span></button>`).join("") : `<div class="anomaly-empty">${onlyWatch ? "关注清单暂无新异动" : "等待新的异动信号"}</div>`;
   };
   const status = () => {
-    const t = clock(), active = isMarketTime(t), last = Math.max(lastMarketAt, lastBoardAt);
-    const age = last ? Math.round((Date.now() - last) / 1000) : 0;
-    const label = !active ? "非连续监测时段 · 保留当日记录" : !last ? "正在建立连续行情基线" : age > 120 ? `行情已 ${age} 秒未更新 · 请检查网络` : `监测中 · 最近快照 ${age} 秒前 · ${coverage ? coverage + " · " : ""}股票约30秒／涨停约60秒`;
+    const t = clock(), active = isMarketTime(t), age = lastMarketAt ? Math.round((Date.now() - lastMarketAt) / 1000) : 0;
+    const boardAge = lastBoardAt ? Math.round((Date.now() - lastBoardAt) / 1000) : 0;
+    const label = !active ? "非连续监测时段 · 保留当日记录" : !lastMarketAt ? "正在建立股票行情基线" : age > 120 ? `股票行情已 ${age} 秒未更新 · 涨停榜 ${boardAge || "—"} 秒前` : `监测中 · 股票 ${age} 秒前 · ${coverage ? coverage + " · " : ""}关注约15秒／全市场约90秒`;
     $("#anomalyState").textContent = label;
-    shell.classList.toggle("stale", active && !!last && age > 120);
+    shell.classList.toggle("stale", active && !!lastMarketAt && age > 120);
   };
   const add = (type, row, label, detail, level = "signal") => {
     const t = clock(), key = `${t.date}:${row.code}:${type}`;
@@ -75,16 +76,18 @@
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { unread = 0; document.title = title; } });
   document.addEventListener("quant:market-snapshot", (event) => {
     const next = event.detail, t = clock();
-    if (!next || next.date !== t.date || next.mode === "review" || !Array.isArray(next.stocks) || next.stocks.length < 30) return;
+    if (!next || next.date !== t.date || next.mode === "review" || !Array.isArray(next.stocks) || !next.stocks.length) return;
     lastMarketAt = Date.now();
-    coverage = Number(next.total) ? `主板 ${next.stocks.length} 只 · 行情 ${next.scanned}/${next.total}` : "";
+    if (!next.partial && Number(next.total)) coverage = `主板 ${next.stocks.length} 只 · 行情 ${next.scanned}/${next.total}`;
     status();
-    const map = new Map(next.stocks.filter((x) => /^\d{6}$/.test(x.code) && Number.isFinite(x.pct) && Number.isFinite(x.amount)).map((x) => [x.code, x]));
-    if (priorMarket && priorMarket.date === next.date && isMarketTime(t)) {
-      const seconds = (next.capturedAt - priorMarket.at) / 1000;
-      if (seconds >= 10 && seconds <= 100) for (const row of map.values()) {
-        const before = priorMarket.rows.get(row.code);
-        if (!before) continue;
+    for (const row of next.stocks) {
+      if (!/^\d{6}$/.test(row.code) || !Number.isFinite(row.pct) || !Number.isFinite(row.amount)) continue;
+      const at = Number(row.quoteAt) || Number(next.capturedAt) || Date.now();
+      if (Date.now() - at > 180000 || at > Date.now() + 60000) continue;
+      const before = priorMarket.get(row.code);
+      if (before && before.date === next.date && before.at >= at) continue;
+      const seconds = before ? (at - before.at) / 1000 : 0;
+      if (before && row.amount >= before.amount && seconds >= 10 && seconds <= 180 && isMarketTime(t)) {
         const move = row.pct - before.pct, traded = row.amount - before.amount;
         if (t.minutes >= 555 && t.minutes < 565) {
           if (t.minutes >= 560 && before.pct < 3 && row.pct >= 3 && row.amount >= 1000000)
@@ -96,8 +99,13 @@
             add("volume", row, "放量走强", `${Math.round(seconds)} 秒新增成交 ${(traded / 1e6).toFixed(1)} 百万 · 涨幅 ${row.pct.toFixed(2)}%`);
         }
       }
+      priorMarket.set(row.code, { date: next.date, at, pct: row.pct, amount: row.amount });
     }
-    priorMarket = { date: next.date, at: next.capturedAt, rows: map };
+  });
+  document.addEventListener("quant:market-health", (event) => {
+    marketHealth = event.detail;
+    if (marketHealth?.state === "ready") coverage = `全市场 ${marketHealth.scanned}/${marketHealth.total}${marketHealth.missingPages ? ` · 缺 ${marketHealth.missingPages} 页` : ""}`;
+    status();
   });
   document.addEventListener("quant:board-snapshot", (event) => {
     const next = event.detail, t = clock();
