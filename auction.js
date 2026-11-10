@@ -91,7 +91,7 @@
   }
   async function fetchPage(page) {
     const url = new URL("https://push2.eastmoney.com/api/qt/clist/get");
-    url.search = new URLSearchParams({ pn: String(page), pz: "100", po: "1", np: "1", fltt: "2", invt: "2", fid: "f3", fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23", fields: "f2,f3,f5,f6,f8,f10,f12,f14,f17,f18,f124", _: String(Date.now()) });
+    url.search = new URLSearchParams({ pn: String(page), pz: "100", po: "1", np: "1", fltt: "2", invt: "2", fid: "f3", fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23", fields: "f2,f3,f5,f6,f8,f10,f12,f14,f17,f18,f100,f124", _: String(Date.now()) });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
     try {
@@ -144,7 +144,7 @@
       document.dispatchEvent(new CustomEvent("quant:market-snapshot", { detail: {
         date: marketDate, mode: effective.mode, capturedAt: Date.now(), scanned: deduped.length, total: first.total, missingPages: failed,
         stocks: base.map((x) => ({ code: x.f12, name: x.f14, pct: +x.f3 || 0,
-          amount: +x.f6 || 0, turnover: +x.f8 || 0, price: +x.f2 || 0 }))
+          amount: +x.f6 || 0, turnover: +x.f8 || 0, price: +x.f2 || 0, sector: x.f100 || "" }))
       } }));
       const time = new Date().toLocaleTimeString("zh-CN", { timeZone: zone });
       $("auctionUpdated").textContent = `${effective.mode === "review" ? marketDate + " 复盘" : "更新 " + time} · 扫描 ${deduped.length}/${first.total} 只${failed ? `（${failed} 页缺失）` : ""} · ${list.length} 个${relaxed ? "宽松" : "严格"}候选`;
