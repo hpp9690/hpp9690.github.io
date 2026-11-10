@@ -102,10 +102,10 @@
   const renderWatch = () => {
     $("#watchCount").textContent = watched.length;
     $("#watchItems").innerHTML = watched.length ? watched.map((item) => `<div class="watch-item"><button type="button" data-watch-code="${item.code}"><b>${escapeHtml(item.name || item.code)}</b><small>${item.code}</small></button><button type="button" data-remove-watch="${item.code}" aria-label="移除 ${escapeHtml(item.name || item.code)}">×</button></div>`).join("") : `<div class="watch-empty">点击股票旁的 ☆ 加入重点观察</div>`;
-    document.querySelectorAll(".watch-star[data-code]").forEach((button) => {
+    document.querySelectorAll(".watch-star[data-code],.lookup-watch[data-code]").forEach((button) => {
       const active = watched.some((item) => item.code === button.dataset.code);
       button.classList.toggle("active", active);
-      const label = active ? "★" : "☆";
+      const label = button.classList.contains("lookup-watch") ? (active ? "★ 已关注" : "☆ 加入关注") : (active ? "★" : "☆");
       if (button.textContent !== label) button.textContent = label;
       button.setAttribute("aria-pressed", String(active));
     });
@@ -166,6 +166,7 @@
   dataRoots.forEach((root) => rowObserver.observe(root, { childList: true, subtree: true, characterData: true }));
   decorateRows();
   updateDeskMetrics();
+  document.addEventListener("quant:lookup-rendered", renderWatch);
 
   $("#watchToggle")?.addEventListener("click", () => {
     const panel = $("#watchPanel"), open = panel.hidden;
@@ -260,7 +261,7 @@
       refresh.classList.add("is-refreshing");
       setTimeout(() => refresh.classList.remove("is-refreshing"), 1200);
     }
-    const star = event.target.closest(".watch-star");
+    const star = event.target.closest(".watch-star,.lookup-watch");
     if (star) {
       toggleWatch(star.dataset.code, star.dataset.name);
       return;
