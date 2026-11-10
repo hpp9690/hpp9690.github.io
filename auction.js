@@ -113,14 +113,14 @@
       $("auctionMobile").innerHTML = `<div class="zt-empty">09:15 前没有真实竞价数据</div>`;
       return;
     }
-    $("auctionUpdated").textContent = "正在扫描多页行情";
+    $("auctionUpdated").textContent = "正在扫描涨幅前列";
     loadBusy = true;
     try {
       const first = await fetchPage(1);
-      const pageCount = Math.min(60, Math.ceil(first.total / 100));
+      const pageCount = Math.min(6, Math.ceil(first.total / 100));
       const pages = [];
-      for (let start = 2; start <= pageCount; start += 12) {
-        const batch = Array.from({ length: Math.min(12, pageCount - start + 1) }, (_, i) => start + i);
+      for (let start = 2; start <= pageCount; start += 5) {
+        const batch = Array.from({ length: Math.min(5, pageCount - start + 1) }, (_, i) => start + i);
         pages.push(...await Promise.allSettled(batch.map(fetchPage)));
       }
       const raw = first.rows.concat(pages.flatMap((x) => x.status === "fulfilled" ? x.value.rows : []));
@@ -139,18 +139,18 @@
       const allStocks = prepared.filter((x) => /^\d{6}$/.test(x.f12) && !/^[NC]/.test(x.f14));
       const normalized = (x) => ({ code: x.f12, name: x.f14, pct: +x.f3 || 0,
         amount: +x.f6 || 0, turnover: +x.f8 || 0, price: +x.f2 || 0,
-        sector: x.f100 || "", floatCap: +x.f117 || 0 });
+        sector: x.f100 || "", floatCap: +x.f117 || 0, quoteAt: (+x.f124 || 0) * 1000 });
       const minAmount = liveAuction ? 1e6 : 5e6;
       let list = base.filter((x) => x._scanPct >= 3 && x._scanPct <= 10.2 && x._scanAmount >= minAmount);
       let relaxed = false;
       if (!list.length) { list = base.filter((x) => x._scanPct >= 1.5 && x._scanPct <= 10.2 && x._scanAmount >= 5e5); relaxed = true; }
       render(list, effective);
       document.dispatchEvent(new CustomEvent("quant:market-snapshot", { detail: {
-        date: marketDate, mode: effective.mode, capturedAt: Date.now(), scanned: deduped.length, total: first.total, missingPages: failed,
+        date: marketDate, mode: effective.mode, capturedAt: Date.now(), scanned: deduped.length, total: first.total, missingPages: failed, partial: true, source: "fast",
         stocks: base.map(normalized), allStocks: allStocks.map(normalized)
       } }));
       const time = new Date().toLocaleTimeString("zh-CN", { timeZone: zone });
-      $("auctionUpdated").textContent = `${effective.mode === "review" ? marketDate + " 复盘" : "更新 " + time} · 扫描 ${deduped.length}/${first.total} 只${failed ? `（${failed} 页缺失）` : ""} · ${list.length} 个${relaxed ? "宽松" : "严格"}候选`;
+      $("auctionUpdated").textContent = `${effective.mode === "review" ? marketDate + " 复盘" : "更新 " + time} · 涨幅前列 ${deduped.length} 只${failed ? `（${failed} 页缺失）` : ""} · ${list.length} 个${relaxed ? "宽松" : "严格"}候选`;
     } catch {
       $("auctionUpdated").textContent = "行情暂不可用";
       $("auctionRows").innerHTML = `<tr><td colspan="7" class="zt-empty">竞价行情接口暂时不可用，请稍后重试</td></tr>`;
