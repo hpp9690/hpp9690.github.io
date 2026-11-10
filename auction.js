@@ -91,7 +91,7 @@
   }
   async function fetchPage(page) {
     const url = new URL("https://push2.eastmoney.com/api/qt/clist/get");
-    url.search = new URLSearchParams({ pn: String(page), pz: "100", po: "1", np: "1", fltt: "2", invt: "2", fid: "f3", fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23", fields: "f2,f3,f5,f6,f8,f10,f12,f14,f17,f18,f100,f124", _: String(Date.now()) });
+    url.search = new URLSearchParams({ pn: String(page), pz: "100", po: "1", np: "1", fltt: "2", invt: "2", fid: "f3", fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23", fields: "f2,f3,f5,f6,f8,f10,f12,f14,f17,f18,f100,f117,f124", _: String(Date.now()) });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
     try {
@@ -136,6 +136,10 @@
         return { ...x, _scanPct: liveAuction ? (+x.f3 || 0) : (open > 0 && prev > 0 ? (open / prev - 1) * 100 : (+x.f3 || 0)), _scanAmount: +x.f6 || 0, _scanTurnover: +x.f8 || 0 };
       });
       const base = prepared.filter((x) => mainBoard(x.f12) && !/ST|退/.test(x.f14) && !/^[NC]/.test(x.f14));
+      const allStocks = prepared.filter((x) => /^\d{6}$/.test(x.f12) && !/^[NC]/.test(x.f14));
+      const normalized = (x) => ({ code: x.f12, name: x.f14, pct: +x.f3 || 0,
+        amount: +x.f6 || 0, turnover: +x.f8 || 0, price: +x.f2 || 0,
+        sector: x.f100 || "", floatCap: +x.f117 || 0 });
       const minAmount = liveAuction ? 1e6 : 5e6;
       let list = base.filter((x) => x._scanPct >= 3 && x._scanPct <= 10.2 && x._scanAmount >= minAmount);
       let relaxed = false;
@@ -143,8 +147,7 @@
       render(list, effective);
       document.dispatchEvent(new CustomEvent("quant:market-snapshot", { detail: {
         date: marketDate, mode: effective.mode, capturedAt: Date.now(), scanned: deduped.length, total: first.total, missingPages: failed,
-        stocks: base.map((x) => ({ code: x.f12, name: x.f14, pct: +x.f3 || 0,
-          amount: +x.f6 || 0, turnover: +x.f8 || 0, price: +x.f2 || 0, sector: x.f100 || "" }))
+        stocks: base.map(normalized), allStocks: allStocks.map(normalized)
       } }));
       const time = new Date().toLocaleTimeString("zh-CN", { timeZone: zone });
       $("auctionUpdated").textContent = `${effective.mode === "review" ? marketDate + " 复盘" : "更新 " + time} · 扫描 ${deduped.length}/${first.total} 只${failed ? `（${failed} 页缺失）` : ""} · ${list.length} 个${relaxed ? "宽松" : "严格"}候选`;
