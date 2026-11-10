@@ -3,20 +3,45 @@
   const cards = [...document.querySelectorAll(".card")];
   const findCard = (title) => cards.find((card) => card.querySelector("h2")?.textContent.includes(title));
   const sections = [
+    { id: "anomaly", label: "异动捕捉", el: null },
     { id: "lookup", label: "个股查询", el: $(".top-lookup") },
     { id: "auction", label: "竞价候选", el: $(".auction") },
     { id: "limitup", label: "涨停雷达", el: $(".limitup") },
     { id: "watchlist", label: "候选扫描", el: findCard("候选扫描") },
     { id: "guide", label: "评分逻辑", el: $(".guide") }
-  ].filter((item) => item.el);
+  ];
 
-  sections.forEach(({ id, el }) => { el.id = id; el.dataset.module = id; });
+  sections.forEach(({ id, el }) => { if (el) { el.id = id; el.dataset.module = id; } });
+  for (const selector of [".notice", ".toolbar", ".stats"]) {
+    const el = $(selector);
+    if (el) el.dataset.module = "watchlist";
+  }
 
   const nav = document.createElement("nav");
   nav.className = "quick-nav";
   nav.setAttribute("aria-label", "功能快捷导航");
-  nav.innerHTML = `<div class="scroll-progress" aria-hidden="true"><i></i></div><div class="quick-nav-inner"><div class="quick-links">${sections.map(({ id, label }) => `<button type="button" data-target="${id}">${label}</button>`).join("")}</div><div class="quick-actions"><button type="button" id="refreshAll">全部刷新</button><button type="button" id="focusMode" aria-pressed="false">精简模式</button></div></div>`;
+  nav.innerHTML = `<div class="quick-nav-inner"><div class="quick-links">${sections.map(({ id, label }) => `<button type="button" data-target="${id}" aria-controls="${id}">${label}</button>`).join("")}</div><div class="quick-actions"><button type="button" id="refreshAll">全部刷新</button><button type="button" id="focusMode" aria-pressed="false">精简模式</button></div></div>`;
   document.querySelector("header")?.after(nav);
+
+  const validViews = new Set(sections.map((item) => item.id));
+  const activateView = (id, { remember = true, scroll = true } = {}) => {
+    if (!validViews.has(id)) id = "anomaly";
+    document.body.dataset.view = id;
+    document.querySelectorAll("[data-module]").forEach((panel) => {
+      panel.hidden = panel.dataset.module !== id;
+    });
+    nav.querySelectorAll("[data-target]").forEach((button) => {
+      const active = button.dataset.target === id;
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+    const selected = document.getElementById(id);
+    if (selected?.classList.contains("is-collapsed")) selected.querySelector(".section-toggle")?.click();
+    if (remember && location.hash !== `#${id}`) history.pushState(null, "", `#${id}`);
+    if (scroll) nav.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  document.addEventListener("quant:open-view", (event) => activateView(event.detail?.id));
 
   const desk = document.createElement("section");
   desk.className = "decision-desk";
@@ -69,8 +94,8 @@
   const searchStock = (code) => {
     const input = $("#stockSearch"), form = $("#lookupForm");
     if (!input || !form) return;
+    activateView("lookup");
     input.value = code;
-    document.getElementById("lookup")?.scrollIntoView({ behavior: "smooth", block: "start" });
     form.requestSubmit();
     showToast(`正在打开 ${code} 个股详情`);
   };
@@ -164,18 +189,17 @@
     const action = event.target.closest("[data-workflow]");
     if (!action) return;
     const workflow = action.dataset.workflow;
-    if (workflow === "auction") document.getElementById("auction")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (workflow === "auction") activateView("auction");
     if (workflow === "first" || workflow === "multi" || workflow === "broken") {
-      if (document.getElementById("limitup")?.classList.contains("is-collapsed")) document.querySelector("#limitup .section-toggle")?.click();
+      activateView("limitup");
       document.querySelector(`[data-pool="${workflow === "broken" ? "zb" : "zt"}"]`)?.click();
       if (workflow !== "broken") document.querySelector(`[data-zt="${workflow}"]`)?.click();
-      document.getElementById("limitup")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     if (workflow === "liquid") {
+      activateView("watchlist");
       const amount = $("#amount");
       if (amount) { amount.value = "500000000"; amount.dispatchEvent(new Event("change", { bubbles: true })); }
       document.querySelector('[data-preset="defensive"]')?.click();
-      document.getElementById("watchlist")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     action.classList.add("selected");
     setTimeout(() => action.classList.remove("selected"), 1200);
@@ -184,14 +208,13 @@
   nav.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-target]");
     if (!button) return;
-    const target = document.getElementById(button.dataset.target);
-    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    activateView(button.dataset.target);
   });
 
   const collapseKey = "quantLens.collapsedModules.v1";
   let collapsed = [];
   try { collapsed = JSON.parse(localStorage.getItem(collapseKey) || "[]"); } catch {}
-  sections.filter(({ id, el }) => id !== "lookup" && el.querySelector(".cardhead")).forEach(({ id, el }) => {
+  sections.filter(({ id, el }) => id !== "lookup" && el?.querySelector(".cardhead")).forEach(({ id, el }) => {
     const head = el.querySelector(".cardhead");
     const button = document.createElement("button");
     button.type = "button";
@@ -205,7 +228,7 @@
     setState(collapsed.includes(id));
     button.addEventListener("click", () => {
       setState(!el.classList.contains("is-collapsed"));
-      collapsed = sections.filter((item) => item.el.classList.contains("is-collapsed")).map((item) => item.id);
+      collapsed = sections.filter((item) => item.el?.classList.contains("is-collapsed")).map((item) => item.id);
       try { localStorage.setItem(collapseKey, JSON.stringify(collapsed)); } catch {}
     });
     head.append(button);
@@ -248,8 +271,8 @@
     const code = stockTarget.textContent.match(/\b\d{6}\b/)?.[0];
     const input = $("#stockSearch"), form = $("#lookupForm");
     if (!code || !input || !form) return;
+    activateView("lookup");
     input.value = code;
-    document.getElementById("lookup")?.scrollIntoView({ behavior: "smooth", block: "start" });
     form.requestSubmit();
     showToast(`正在打开 ${code} 个股详情`);
   });
@@ -259,23 +282,13 @@
   dock.innerHTML = `<button type="button" id="quickSearch" aria-label="搜索股票">⌕</button><button type="button" id="backTop" aria-label="返回顶部">↑</button>`;
   document.body.append(dock);
   $("#quickSearch")?.addEventListener("click", () => {
-    document.getElementById("lookup")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    activateView("lookup");
     setTimeout(() => $("#stockSearch")?.focus(), 350);
   });
   $("#backTop")?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
 
-  const linkButtons = [...nav.querySelectorAll("button[data-target]")];
-  const observer = new IntersectionObserver((entries) => {
-    const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-    if (!visible) return;
-    linkButtons.forEach((button) => button.classList.toggle("active", button.dataset.target === visible.target.id));
-  }, { rootMargin: "-24% 0px -64%", threshold: [0, 0.15, 0.4] });
-  sections.forEach(({ el }) => observer.observe(el));
-
   let scrollQueued = false;
   const updateScroll = () => {
-    const max = document.documentElement.scrollHeight - innerHeight;
-    nav.querySelector(".scroll-progress i").style.transform = `scaleX(${max > 0 ? Math.min(1, scrollY / max) : 0})`;
     dock.classList.toggle("visible", scrollY > 500);
     scrollQueued = false;
   };
@@ -287,7 +300,7 @@
   addEventListener("keydown", (event) => {
     if (event.key === "/" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) {
       event.preventDefault();
-      document.getElementById("lookup")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      activateView("lookup");
       $("#stockSearch")?.focus();
     }
     if (event.key === "Escape") {
@@ -296,5 +309,9 @@
       document.activeElement?.blur?.();
     }
   });
+  const viewFromHash = () => location.hash.slice(1);
+  activateView(validViews.has(viewFromHash()) ? viewFromHash() : "anomaly", { remember: false, scroll: false });
+  addEventListener("popstate", () => activateView(viewFromHash(), { remember: false }));
+  addEventListener("hashchange", () => activateView(viewFromHash(), { remember: false }));
 })();
 
