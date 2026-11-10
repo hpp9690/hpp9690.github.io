@@ -3,6 +3,12 @@
   const fields = "f2,f3,f5,f6,f8,f10,f12,f14,f17,f18,f100,f117,f124";
   const stampDate = (seconds) => seconds > 0 ? new Date(seconds * 1000).toLocaleDateString("en-CA", { timeZone: zone }) : "";
   const currentDate = () => new Date().toLocaleDateString("en-CA", { timeZone: zone });
+  const shouldPoll = () => {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+    const part = (type) => parts.find((x) => x.type === type)?.value || "";
+    const minute = Number(part("hour")) * 60 + Number(part("minute"));
+    return !["Sat", "Sun"].includes(part("weekday")) && ((minute >= 555 && minute < 690) || (minute >= 780 && minute < 900));
+  };
   const mainBoard = (code) => /^(000|001|002|003|600|601|603|605)/.test(code);
   const normalize = (x) => ({ code: x.f12, name: x.f14, pct: Number(x.f3) || 0,
     amount: Number(x.f6) || 0, turnover: Number(x.f8) || 0, price: Number(x.f2) || 0,
@@ -90,8 +96,8 @@
     } catch {} finally { watchBusy = false; }
   };
   fullScan(); watchScan();
-  setInterval(fullScan, 90000);
-  setInterval(watchScan, 15000);
+  setInterval(() => { if (shouldPoll()) fullScan(); }, 90000);
+  setInterval(() => { if (shouldPoll()) watchScan(); }, 15000);
   document.addEventListener("quant:watchlist-changed", watchScan);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { fullScan(); watchScan(); } });
 })();
