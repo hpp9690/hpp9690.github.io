@@ -3,6 +3,7 @@
   const cards = [...document.querySelectorAll(".card")];
   const findCard = (title) => cards.find((card) => card.querySelector("h2")?.textContent.includes(title));
   const sections = [
+    { id: "opportunity", label: "潜在机会", el: null },
     { id: "anomaly", label: "异动捕捉", el: null },
     { id: "heatmap", label: "市场热力图", el: null },
     { id: "lookup", label: "个股查询", el: $(".top-lookup") },
@@ -26,7 +27,7 @@
 
   const validViews = new Set(sections.map((item) => item.id));
   const activateView = (id, { remember = true, scroll = true } = {}) => {
-    if (!validViews.has(id)) id = "anomaly";
+    if (!validViews.has(id)) id = "opportunity";
     document.body.dataset.view = id;
     document.querySelectorAll("[data-module]").forEach((panel) => {
       panel.hidden = panel.dataset.module !== id;
@@ -127,6 +128,10 @@
     saveWatch();
     renderWatch();
   };
+  document.addEventListener("quant:watch-request", (event) => {
+    const { code, name } = event.detail || {};
+    if (/^\d{6}$/.test(code || "")) toggleWatch(code, name);
+  });
   const identityFrom = (target) => {
     const code = target.querySelector("small")?.textContent.match(/\d{6}/)?.[0] || target.textContent.match(/\b\d{6}\b/)?.[0];
     const rawName = target.querySelector("b")?.childNodes?.[0]?.textContent || "";
@@ -325,7 +330,7 @@
     }
   });
   const viewFromHash = () => location.hash.slice(1);
-  activateView(validViews.has(viewFromHash()) ? viewFromHash() : "anomaly", { remember: false, scroll: false });
+  activateView(validViews.has(viewFromHash()) ? viewFromHash() : "opportunity", { remember: false, scroll: false });
   if (validViews.has(viewFromHash())) requestAnimationFrame(() => document.getElementById(viewFromHash())?.scrollIntoView({ block: "start" }));
   addEventListener("popstate", () => activateView(viewFromHash(), { remember: false }));
   addEventListener("hashchange", () => activateView(viewFromHash(), { remember: false }));
