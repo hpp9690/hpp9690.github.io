@@ -14,7 +14,16 @@
   shell.setAttribute("aria-label", "概念板块选股器");
   shell.innerHTML = `<div class="concept-head"><div><p class="eyebrow">CONCEPT STOCK SCREENER</p><h2>概念板块选股器</h2><p>搜索概念 → 查看全部成分股 → 按盘面强度筛选龙头候选。</p></div><span id="conceptHealth">正在读取板块目录</span></div><form id="conceptForm" class="concept-search"><input id="conceptQuery" type="search" autocomplete="off" placeholder="搜索概念，如 机器人、AI应用、PCB" aria-label="搜索概念板块"><button type="submit">搜索板块</button><button type="button" id="conceptReload">更新目录</button></form><div class="concept-presets"><button type="button" data-concept-example="机器人">机器人</button><button type="button" data-concept-example="AI应用">AI应用</button><button type="button" data-concept-example="PCB">PCB</button></div><div id="conceptMatches" class="concept-matches"></div><div id="conceptResult" class="concept-result" hidden><div class="concept-board-head"><div><p class="eyebrow">当前板块</p><h3 id="conceptBoardName">—</h3><p id="conceptBoardMeta">读取成分股中</p></div><span id="conceptBoardMove">—</span></div><div id="conceptLeaders" class="concept-leaders"></div><div class="concept-filters"><label>市场 <select id="conceptMarket"><option value="all">全部A股</option><option value="main">沪深主板</option><option value="growth">创业板</option><option value="star">科创板</option><option value="beijing">北交所</option></select></label><label>涨幅 <select id="conceptGain"><option value="-100">不限</option><option value="0">≥0%</option><option value="2">≥2%</option><option value="5">≥5%</option></select></label><label>成交额 <select id="conceptAmount"><option value="0">不限</option><option value="50000000">≥5000万</option><option value="200000000">≥2亿</option></select></label><label>排序 <select id="conceptSort"><option value="leader">盘面强度</option><option value="pct">涨幅</option><option value="amount">成交额</option><option value="turnover">换手率</option><option value="cap">流通市值</option></select></label></div><div id="conceptCount" class="concept-count"></div><div id="conceptStocks" class="concept-stocks"></div><button type="button" id="conceptMore" hidden>显示更多成分股</button><p class="concept-note">“盘面龙头候选”按板块内涨幅、成交额、换手和流通市值排序，不代表公司业务地位或后续涨幅。公开行情可能延迟、缺页或调整板块成分。</p></div>`;
   ($(".opportunity-panel") || $(".decision-desk"))?.after(shell);
-  let boards = [], selected = null, members = [], boardBusy = false, filterLimit = 40, queryLimit = 36, catalogueAt = 0;
+  $("#conceptQuery").insertAdjacentHTML("afterend", `<button type="button" id="conceptClear" aria-label="清除搜索内容" hidden>×</button>`);
+  $("#conceptBoardMove").insertAdjacentHTML("afterend", `<button type="button" id="conceptChange">更换板块</button>`);
+  $(".concept-filters", shell).insertAdjacentHTML("beforebegin", `<div class="concept-sort-tabs" role="group" aria-label="成分股排序"><button type="button" data-concept-sort="leader" class="active" aria-pressed="true">综合</button><button type="button" data-concept-sort="pct" aria-pressed="false">涨幅</button><button type="button" data-concept-sort="amount" aria-pressed="false">成交</button><button type="button" data-concept-sort="turnover" aria-pressed="false">换手</button><button type="button" data-concept-sort="cap" aria-pressed="false">市值</button></div>`);
+  $("#conceptSort").closest("label").hidden = true;
+  $(".concept-filters", shell).insertAdjacentHTML("beforeend", `<button type="button" id="conceptReset">重置筛选</button>`);
+  $("#conceptMatches").setAttribute("aria-live", "polite");
+  $("#conceptHealth").setAttribute("role", "status");
+  let boards = [], selected = null, members = [], filterLimit = 40, queryLimit = 12, catalogueAt = 0, selectionToken = 0, searchOpen = true;
+  let recentCodes = [];
+  try { recentCodes = JSON.parse(localStorage.getItem("quantLens.conceptRecent.v1") || "[]").filter((x) => /^BK\d+$/.test(x)).slice(0, 5); } catch {}
   try { const cached = JSON.parse(localStorage.getItem(cacheKey) || "{}"); if (Date.now() - cached.at < 6 * 3600000 && Array.isArray(cached.boards)) { boards = cached.boards; catalogueAt = cached.at; } } catch {}
   const request = async (params) => {
     const url = new URL("https://push2.eastmoney.com/api/qt/clist/get");
@@ -32,8 +41,10 @@
   const memberPage = (code, page) => request({ pn: String(page), pz: "100", fid: "f12", fs: `b:${code}`, fields: "f2,f3,f6,f8,f10,f12,f14,f20,f21,f124" });
   const renderMatches = () => {
     const query = compact($("#conceptQuery").value);
-    const matches = boards.filter((x) => !query || compact(x.name).includes(query)).sort((a, b) => query ? Number(compact(b.name) === query) - Number(compact(a.name) === query) || b.pct - a.pct : b.pct - a.pct);
-    $("#conceptMatches").innerHTML = matches.slice(0, queryLimit).map((x) => `<button type="button" data-board="${safe(x.code)}" class="${selected?.code === x.code ? "active" : ""}"><b>${safe(x.name)}</b><span class="${x.pct >= 0 ? "up" : "down"}">${pct(x.pct)}</span></button>`).join("") + (matches.length > queryLimit ? `<button type="button" data-more-boards="1">更多板块（共 ${matches.length} 个）</button>` : "") || `<div class="concept-empty">${boards.length ? "没有匹配的概念板块" : "正在读取概念板块目录"}</div>`;
+    const matches = boards.filter((x) => !query || compact(x.name).includes(query)).sort((a, b) => (query ? Number(compact(b.name) === query) - Number(compact(a.name) === query) : Number(recentCodes.includes(b.code)) - Number(recentCodes.includes(a.code))) || b.pct - a.pct);
+    $("#conceptMatches").hidden = !searchOpen;
+    $("#conceptClear").hidden = !$("#conceptQuery").value;
+    $("#conceptMatches").innerHTML = matches.slice(0, queryLimit).map((x) => `<button type="button" data-board="${safe(x.code)}" class="${selected?.code === x.code ? "active" : ""}"><b>${safe(x.name)}${!query && recentCodes.includes(x.code) ? `<small>最近查看</small>` : ""}</b><span class="${x.pct >= 0 ? "up" : "down"}">${pct(x.pct)}</span></button>`).join("") + (matches.length > queryLimit ? `<button type="button" data-more-boards="1">显示更多 · ${matches.length} 个板块</button>` : "") || `<div class="concept-empty">${boards.length ? "没有匹配的概念板块，试试更短的关键词" : "正在读取概念板块目录"}</div>`;
     $("#conceptHealth").textContent = boards.length ? `已载入 ${boards.length} 个概念板块` : "概念板块目录暂不可用";
   };
   const loadBoards = async (force = false) => {
@@ -79,14 +90,21 @@
     $("#conceptMore").hidden = ordered.length <= filterLimit;
   };
   const selectBoard = async (code) => {
-    if (boardBusy) return;
     const board = boards.find((x) => x.code === code); if (!board) return;
-    selected = board; boardBusy = true; members = []; filterLimit = 40;
+    const token = ++selectionToken;
+    selected = board; members = []; filterLimit = 40; searchOpen = false;
+    recentCodes = [code, ...recentCodes.filter((x) => x !== code)].slice(0, 5);
+    try { localStorage.setItem("quantLens.conceptRecent.v1", JSON.stringify(recentCodes)); } catch {}
+    $("#conceptQuery").value = board.name;
+    $(".concept-presets").hidden = true;
+    $("#conceptMatches").hidden = true;
     $("#conceptResult").hidden = false; $("#conceptBoardName").textContent = board.name;
     $("#conceptBoardMove").textContent = pct(board.pct);
     $("#conceptBoardMove").className = board.pct >= 0 ? "up" : "down";
     $("#conceptBoardMeta").textContent = "正在读取板块成分股…";
-    $("#conceptLeaders").innerHTML = ""; $("#conceptStocks").innerHTML = "";
+    $("#conceptLeaders").innerHTML = `<div class="concept-loading">正在计算板块盘面强度…</div>`;
+    $("#conceptStocks").innerHTML = `<div class="concept-loading">正在读取成分股…</div>`;
+    $("#conceptResult").setAttribute("aria-busy", "true");
     renderMatches();
     try {
       const first = await memberPage(code, 1), pages = Math.ceil(first.total / 100), rows = [...first.rows], failed = [];
@@ -96,19 +114,45 @@
         results.forEach((r, i) => { if (r.status === "fulfilled") rows.push(...r.value.rows); else failed.push(nums[i]); });
       }
       if (failed.length) { const retry = await Promise.allSettled(failed.map((n) => memberPage(code, n))); retry.forEach((r) => { if (r.status === "fulfilled") rows.push(...r.value.rows); }); }
+      if (token !== selectionToken) return;
       const unique = [...new Map(rows.filter((x) => /^\d{6}$/.test(x.f12 || "")).map((x) => [x.f12, { code: x.f12, name: x.f14, pct: Number(x.f3) || 0, amount: Number(x.f6) || 0, turnover: Number(x.f8) || 0, cap: Number(x.f21) || 0, at: Number(x.f124) * 1000 || 0 }])).values()];
       members = scoreMembers(unique);
       const latest = Math.max(0, ...unique.map((x) => x.at));
       const stamp = latest ? new Date(latest).toLocaleString("zh-CN", { timeZone: zone }) : "时间未知";
       $("#conceptBoardMeta").textContent = `${stamp} 行情 · ${unique.length}/${first.total} 只成分股${unique.length < first.total ? " · 部分缺页" : ""} · 板块上涨 ${board.up} / 下跌 ${board.down}`;
       renderMembers();
-    } catch { $("#conceptBoardMeta").textContent = "成分股读取失败，请重新选择板块"; $("#conceptStocks").innerHTML = `<div class="concept-empty">行情接口暂不可用</div>`; }
-    finally { boardBusy = false; }
+    } catch { if (token === selectionToken) { $("#conceptBoardMeta").textContent = "成分股读取失败，请重新选择板块"; $("#conceptStocks").innerHTML = `<div class="concept-empty">行情接口暂不可用</div>`; } }
+    finally { if (token === selectionToken) $("#conceptResult").removeAttribute("aria-busy"); }
   };
-  $("#conceptQuery").addEventListener("input", () => { queryLimit = 36; renderMatches(); });
+  const revealSearch = (clear = false) => {
+    searchOpen = true; queryLimit = 12;
+    if (clear) $("#conceptQuery").value = "";
+    $(".concept-presets").hidden = false;
+    $("#conceptResult").hidden = true;
+    renderMatches();
+  };
+  $("#conceptQuery").addEventListener("input", () => revealSearch());
+  $("#conceptQuery").addEventListener("focus", () => { if (!searchOpen) revealSearch(); });
+  $("#conceptQuery").addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") { const first = $("#conceptMatches [data-board]"); if (first) { event.preventDefault(); first.focus(); } }
+    if (event.key === "Escape" && selected) { searchOpen = false; $("#conceptMatches").hidden = true; $("#conceptResult").hidden = false; $("#conceptQuery").blur(); }
+  });
+  $("#conceptMatches").addEventListener("keydown", (event) => {
+    const choices = [...$("#conceptMatches").querySelectorAll("[data-board]")], index = choices.indexOf(document.activeElement);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); (choices[index + (event.key === "ArrowDown" ? 1 : -1)] || choices[event.key === "ArrowDown" ? 0 : choices.length - 1])?.focus(); }
+    if (event.key === "Escape") { event.preventDefault(); $("#conceptQuery").focus(); }
+  });
   $("#conceptForm").addEventListener("submit", (event) => { event.preventDefault(); const query = compact($("#conceptQuery").value); if (!query) { renderMatches(); return; } const match = boards.find((x) => compact(x.name) === query) || boards.find((x) => compact(x.name).includes(query)); if (match) selectBoard(match.code); else renderMatches(); });
   $("#conceptReload").addEventListener("click", () => loadBoards(true));
+  $("#conceptClear").addEventListener("click", () => { revealSearch(true); $("#conceptQuery").focus(); });
+  $("#conceptChange").addEventListener("click", () => { revealSearch(true); $("#conceptQuery").focus(); });
+  $("#conceptReset").addEventListener("click", () => {
+    $("#conceptMarket").value = "all"; $("#conceptGain").value = "-100"; $("#conceptAmount").value = "0"; $("#conceptSort").value = "leader";
+    shell.querySelectorAll("[data-concept-sort]").forEach((x) => { const active = x.dataset.conceptSort === "leader"; x.classList.toggle("active", active); x.setAttribute("aria-pressed", String(active)); });
+    filterLimit = 40; renderMembers();
+  });
   shell.addEventListener("click", (event) => {
+    const sort = event.target.closest("[data-concept-sort]"); if (sort) { $("#conceptSort").value = sort.dataset.conceptSort; shell.querySelectorAll("[data-concept-sort]").forEach((x) => { const active = x === sort; x.classList.toggle("active", active); x.setAttribute("aria-pressed", String(active)); }); filterLimit = 40; renderMembers(); return; }
     const preset = event.target.closest("[data-concept-example]"); if (preset) { $("#conceptQuery").value = preset.dataset.conceptExample; renderMatches(); const first = boards.find((x) => compact(x.name).includes(compact(preset.dataset.conceptExample))); if (first) selectBoard(first.code); return; }
     const board = event.target.closest("[data-board]"); if (board) { selectBoard(board.dataset.board); return; }
     if (event.target.closest("[data-more-boards]")) { queryLimit += 36; renderMatches(); return; }
