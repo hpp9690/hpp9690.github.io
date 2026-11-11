@@ -147,6 +147,31 @@ input, select { accent-color: var(--accent); }
 .concept-leader:first-child { background: var(--surface-accent); }
 .lookup input, .concept-search input { min-height: 44px; }
 .lookup form button { min-height: 44px; }
+.stock-concepts {
+  margin: 16px 0 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface-subtle);
+}
+.stock-concepts-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.stock-concepts-head h4 { margin: 0; font-size: 14px; }
+.stock-concepts-count { color: var(--muted); font-size: 12px; }
+.stock-concepts-list { display: flex; flex-wrap: wrap; gap: 7px; }
+.stock-concepts-list p { margin: 0; font-size: 13px; }
+.stock-concept {
+  min-height: 36px;
+  max-width: 100%;
+  padding: 6px 11px;
+  overflow-wrap: anywhere;
+  border-color: var(--line-accent);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent-strong);
+  font-size: 13px;
+  text-align: left;
+}
+.stock-concept:hover { background: var(--surface-accent); }
 .suggestions button:focus-visible { position: relative; z-index: 1; background: var(--surface-accent); outline-offset: -2px; }
 .watch-panel, .prob-dialog, .ui-toast { box-shadow: 0 14px 45px #172e4826; }
 .prob-dialog { color: var(--text); }

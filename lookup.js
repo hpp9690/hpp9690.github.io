@@ -1,6 +1,6 @@
 (()=>{
 const $=id=>document.getElementById(id), input=$("stockSearch"), box=$("suggestions"), detail=$("stockDetail");
-let timer, suggestionRequest;
+let timer, suggestionRequest, lookupVersion = 0;
 const num=v=>Number.isFinite(+v)?+v:null, money=v=>v==null?"—":new Intl.NumberFormat("zh-CN",{notation:"compact",maximumFractionDigits:2}).format(v), signed=v=>v==null?"—":`${v>0?"+":""}${v.toFixed(2)}%`;
 function closeSuggestions() {
   clearTimeout(timer);
@@ -81,11 +81,143 @@ $("lookupForm").addEventListener("submit", (event) => {
   const query = input.value.trim();
   if (/^\d{6}$/.test(query)) {
     closeSuggestions();
-    load(query, /^(5|6|9)/.test(query) ? "1" : "0");
+    const market = !query.startsWith("920") && /^[569]/.test(query) ? "1" : "0";
+    load(query, market);
   } else suggest(query);
 });
-async function load(code,market){detail.innerHTML="<p class='muted'>正在读取个股数据…</p>";const secid=`${market}.${code}`,base="https://push2.eastmoney.com/api/qt/stock/";try{const [quote,flow,kline]=await Promise.all([get(`${base}get`,{secid,fields:"f43,f44,f45,f46,f47,f48,f57,f58,f60,f169,f170,f168,f162,f167,f116,f117,f171",fltt:2,invt:2}),get(`${base}fflow/kline/get`,{secid,lmt:1,klt:101,fields1:"f1,f2,f3,f7",fields2:"f51,f52,f53,f54,f55,f56,f57,f58"}),get("https://push2his.eastmoney.com/api/qt/stock/kline/get",{secid,klt:101,fqt:1,lmt:30,fields1:"f1,f2,f3,f4,f5,f6",fields2:"f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"})]);if(!quote?.data)throw Error("未找到股票或暂时无行情");const d=quote.data,flowLine=flow?.data?.klines?.at(-1)?.split(",")||[],bars=(kline?.data?.klines||[]).map(x=>x.split(",").map(Number)),closes=bars.map(x=>x[2]).filter(Number.isFinite),ma=n=>closes.length>=n?closes.slice(-n).reduce((a,b)=>a+b,0)/n:null,net=flowLine.slice(1).map(Number),netMain=net.length?net[0]:null;detail.innerHTML=`<div class="detail-title"><div><h3>${d.f58} <small>${d.f57}</small></h3><span class="muted">东方财富行情 · ${d.f86||"更新时间以数据源为准"}</span></div><b class="${+d.f170>=0?"up":"down"}">${signed(num(d.f170))}</b></div><div class="metrics"><div><small>最新价</small><b>${num(d.f43)?.toFixed(2)??"—"}</b></div><div><small>成交额</small><b>${money(num(d.f48))}</b></div><div><small>换手率</small><b>${num(d.f168)?.toFixed(2)??"—"}%</b></div><div><small>市值</small><b>${money(num(d.f116))}</b></div><div><small>市盈率</small><b>${num(d.f162)?.toFixed(2)??"—"}</b></div><div><small>市净率</small><b>${num(d.f167)?.toFixed(2)??"—"}</b></div><div><small>主力净流入</small><b class="${netMain>=0?"up":"down"}">${netMain==null?"—":money(netMain)}</b></div><div><small>近${closes.length}日均线</small><b>${ma(5)==null?"—":`MA5 ${ma(5).toFixed(2)}`} ${ma(20)==null?"":`/ MA20 ${ma(20).toFixed(2)}`}</b></div></div><p class="flow-note">资金流取自东方财富日频资金流向最近记录；净流入是按其大单分类口径统计，不代表全部资金或后续走势。均线根据最近${closes.length}个日K线收盘价计算。</p>`}catch(err){detail.innerHTML=`<p class="error">${err.message||"数据读取失败"}。请确认代码正确，或稍后重试。</p>`}}
-async function get(base,params){const u=new URL(base);u.search=new URLSearchParams({...params,ut:"fa5fd1943c7b386f172d6893dbbd1d0c",_:`${Date.now()}`});const r=await fetch(u);if(!r.ok)throw Error(`行情接口返回 ${r.status}`);return r.json()}
+
+function renderStockConcepts(section, rawConcepts) {
+  const names = typeof rawConcepts === "string"
+    ? [...new Set(rawConcepts.split(",").map((name) => name.trim()).filter((name) => name && name !== "-"))]
+    : [];
+  section.querySelector(".stock-concepts-count").textContent = names.length ? `${names.length} 个` : "";
+  const list = section.querySelector(".stock-concepts-list");
+  if (!names.length) {
+    const status = document.createElement("p");
+    status.className = "muted";
+    status.textContent = "东方财富暂未返回该股的概念板块";
+    list.append(status);
+    return;
+  }
+  for (const name of names) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "stock-concept";
+    button.textContent = name;
+    button.addEventListener("click", () => {
+      document.dispatchEvent(new CustomEvent("quant:open-concept", { detail: { name } }));
+    });
+    list.append(button);
+  }
+}
+
+function renderStockMetrics(metrics, note, quote, flow, kline) {
+  const flowRows = flow?.data?.klines;
+  const latestFlow = Array.isArray(flowRows) ? flowRows.at(-1) : null;
+  const flowLine = typeof latestFlow === "string" ? latestFlow.split(",") : [];
+  const netMain = flowLine.length > 1 ? num(flowLine[1]) : null;
+  const bars = kline?.data?.klines;
+  const closes = Array.isArray(bars)
+    ? bars.filter((bar) => typeof bar === "string").map((bar) => Number(bar.split(",")[2])).filter(Number.isFinite)
+    : [];
+  const average = (days) => closes.length >= days
+    ? closes.slice(-days).reduce((sum, value) => sum + value, 0) / days
+    : null;
+  const averages = [5, 20].flatMap((days) => {
+    const value = average(days);
+    return value === null ? [] : [`MA${days} ${value.toFixed(2)}`];
+  });
+  metrics.innerHTML = `
+    <div><small>最新价</small><b>${num(quote.f43)?.toFixed(2) ?? "—"}</b></div>
+    <div><small>成交额</small><b>${money(num(quote.f48))}</b></div>
+    <div><small>换手率</small><b>${num(quote.f168) === null ? "—" : `${num(quote.f168).toFixed(2)}%`}</b></div>
+    <div><small>市值</small><b>${money(num(quote.f116))}</b></div>
+    <div><small>市盈率</small><b>${num(quote.f162)?.toFixed(2) ?? "—"}</b></div>
+    <div><small>市净率</small><b>${num(quote.f167)?.toFixed(2) ?? "—"}</b></div>
+    <div><small>主力净流入</small><b class="${netMain === null ? "" : netMain >= 0 ? "up" : "down"}">${money(netMain)}</b></div>
+    <div><small>均线</small><b>${averages.join(" / ") || "—"}</b></div>`;
+  note.textContent = "资金流取自东方财富日频资金流向最近记录；净流入是按其大单分类口径统计，不代表全部资金或后续走势。"
+    + (closes.length ? `均线根据最近 ${closes.length} 个日 K 线收盘价计算。` : "");
+}
+
+async function load(code, market) {
+  const version = ++lookupVersion;
+  detail.innerHTML = "<p class='muted'>正在读取个股数据…</p>";
+  const secid = `${market}.${code}`;
+  const base = "https://push2.eastmoney.com/api/qt/stock/";
+  try {
+    const quoteRequest = get(`${base}get`, {
+      secid, fltt: 2, invt: 2,
+      fields: "f43,f48,f57,f58,f86,f116,f129,f162,f167,f168,f170"
+    });
+    const supplementary = Promise.allSettled([
+      get(`${base}fflow/kline/get`, {
+        secid, lmt: 1, klt: 101, fields1: "f1,f2,f3,f7", fields2: "f51,f52,f53,f54,f55,f56,f57,f58"
+      }),
+      get("https://push2his.eastmoney.com/api/qt/stock/kline/get", {
+        secid, klt: 101, fqt: 1, lmt: 30, fields1: "f1,f2,f3,f4,f5,f6",
+        fields2: "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
+      })
+    ]);
+    const quote = (await quoteRequest)?.data;
+    if (version !== lookupVersion) return;
+    if (!quote?.f57 || !quote.f58) throw new Error("未找到股票或暂时无行情");
+    detail.innerHTML = `
+      <div class="detail-title">
+        <div><h3></h3><span class="muted"></span></div><b></b>
+      </div>
+      <div class="metrics"></div>
+      <section class="stock-concepts" aria-labelledby="stockConceptsHeading">
+        <div class="stock-concepts-head">
+          <h4 id="stockConceptsHeading">所属概念板块</h4>
+          <span class="stock-concepts-count"></span>
+        </div>
+        <div class="stock-concepts-list"></div>
+      </section>
+      <p class="flow-note"></p>`;
+    const heading = detail.querySelector("h3");
+    const codeLabel = document.createElement("small");
+    codeLabel.textContent = quote.f57;
+    heading.append(`${quote.f58} `, codeLabel);
+    const quoteTime = Number(quote.f86) * 1000;
+    const quoteStamp = Number.isFinite(quoteTime) && quoteTime > 0
+      ? new Date(quoteTime).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false })
+      : "更新时间以数据源为准";
+    detail.querySelector(".detail-title .muted").textContent = `东方财富行情 · ${quoteStamp}`;
+    const change = detail.querySelector(".detail-title > b");
+    change.className = +quote.f170 >= 0 ? "up" : "down";
+    change.textContent = signed(num(quote.f170));
+
+    const metrics = detail.querySelector(".metrics");
+    const note = detail.querySelector(".flow-note");
+    renderStockMetrics(metrics, note, quote);
+    renderStockConcepts(detail.querySelector(".stock-concepts"), quote.f129);
+
+    const [flow, kline] = await supplementary;
+    if (version !== lookupVersion) return;
+    renderStockMetrics(metrics, note, quote, flow.value, kline.value);
+  } catch (error) {
+    if (version !== lookupVersion) return;
+    const status = document.createElement("p");
+    status.className = "error";
+    status.textContent = `${error.message || "数据读取失败"}。请确认代码正确，或稍后重试。`;
+    detail.replaceChildren(status);
+  }
+}
+
+async function get(base, params) {
+  const url = new URL(base);
+  url.search = new URLSearchParams({ ...params, ut: "fa5fd1943c7b386f172d6893dbbd1d0c", _: Date.now() });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`行情接口返回 ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 const detailObserver = new MutationObserver(() => {
   const title = detail.querySelector(".detail-title");
   if (!title || title.querySelector(".lookup-watch")) return;

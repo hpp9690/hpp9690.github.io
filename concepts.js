@@ -47,8 +47,7 @@
     $("#conceptMatches").innerHTML = matches.slice(0, queryLimit).map((x) => `<button type="button" data-board="${safe(x.code)}" class="${selected?.code === x.code ? "active" : ""}"><b>${safe(x.name)}${!query && recentCodes.includes(x.code) ? `<small>最近查看</small>` : ""}</b><span class="${x.pct >= 0 ? "up" : "down"}">${pct(x.pct)}</span></button>`).join("") + (matches.length > queryLimit ? `<button type="button" data-more-boards="1">显示更多 · ${matches.length} 个板块</button>` : "") || `<div class="concept-empty">${boards.length ? "没有匹配的概念板块，试试更短的关键词" : "正在读取概念板块目录"}</div>`;
     $("#conceptHealth").textContent = boards.length ? `已载入 ${boards.length} 个概念板块` : "概念板块目录暂不可用";
   };
-  const loadBoards = async (force = false) => {
-    if (!force && boards.length && Date.now() - catalogueAt < 15 * 60000) { renderMatches(); return; }
+  const fetchBoards = async () => {
     $("#conceptHealth").textContent = "正在更新概念板块目录";
     try {
       const first = await boardPage(1), pages = Math.ceil(first.total / 100), rows = [...first.rows], failed = [];
@@ -65,6 +64,16 @@
       renderMatches();
       if (boards.length < first.total) $("#conceptHealth").textContent = `已载入 ${boards.length}/${first.total} 个板块 · 部分目录缺页`;
     } catch { renderMatches(); $("#conceptHealth").textContent = boards.length ? `目录更新失败 · 使用缓存 ${boards.length} 个` : "板块目录读取失败，请重试"; }
+  };
+  let catalogueRequest;
+  const loadBoards = (force = false) => {
+    if (catalogueRequest) return catalogueRequest;
+    if (!force && boards.length && Date.now() - catalogueAt < 15 * 60000) {
+      renderMatches();
+      return Promise.resolve();
+    }
+    catalogueRequest = fetchBoards().finally(() => { catalogueRequest = null; });
+    return catalogueRequest;
   };
   const marketOf = (code) => mainBoard(code) ? "main" : /^(300|301)/.test(code) ? "growth" : /^(688|689)/.test(code) ? "star" : /^(4|8|9)/.test(code) ? "beijing" : "other";
   const percentile = (rows, key) => {
@@ -131,6 +140,25 @@
     $("#conceptResult").hidden = true;
     renderMatches();
   };
+  document.addEventListener("quant:open-concept", async (event) => {
+    const name = event.detail?.name?.trim();
+    if (!name) return;
+    const findBoard = () => boards.find((board) => board.name === name);
+    document.dispatchEvent(new CustomEvent("quant:open-view", { detail: { id: "concept" } }));
+    const board = findBoard();
+    if (board) {
+      selectBoard(board.code);
+      return;
+    }
+    const query = $("#conceptQuery");
+    const token = selectionToken;
+    query.value = name;
+    revealSearch();
+    await loadBoards(true);
+    if (token !== selectionToken || query.value !== name || document.body.dataset.view !== "concept") return;
+    const refreshedBoard = findBoard();
+    if (refreshedBoard) selectBoard(refreshedBoard.code);
+  });
   $("#conceptQuery").addEventListener("input", () => revealSearch());
   $("#conceptQuery").addEventListener("focus", () => { if (!searchOpen) revealSearch(); });
   $("#conceptQuery").addEventListener("keydown", (event) => {
