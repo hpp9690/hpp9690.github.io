@@ -23,7 +23,7 @@
   const nav = document.createElement("nav");
   nav.className = "quick-nav";
   nav.setAttribute("aria-label", "功能快捷导航");
-  nav.innerHTML = `<div class="quick-nav-inner"><div class="quick-links">${sections.map(({ id, label }) => `<button type="button" data-target="${id}" aria-controls="${id}">${label}</button>`).join("")}</div></div>`;
+  nav.innerHTML = `<div class="quick-nav-inner"><div class="quick-links">${sections.map(({ id, label }) => `<button type="button" data-target="${id}" aria-controls="${id}">${label}</button>`).join("")}</div><button type="button" id="workspaceFullscreen" hidden>全屏</button></div>`;
   document.querySelector("header")?.after(nav);
 
   const validViews = new Set(sections.map((item) => item.id));
@@ -73,6 +73,28 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toast.classList.remove("show"), 1800);
   };
+
+  const fullscreenButton = $("#workspaceFullscreen");
+  const fullscreenTarget = document.documentElement;
+  if (document.fullscreenEnabled && fullscreenTarget.requestFullscreen && document.exitFullscreen) {
+    fullscreenButton.hidden = false;
+    const updateFullscreenButton = () => {
+      fullscreenButton.textContent = document.fullscreenElement === fullscreenTarget ? "退出全屏" : "全屏";
+    };
+    fullscreenButton.addEventListener("click", async () => {
+      fullscreenButton.disabled = true;
+      try {
+        if (document.fullscreenElement === fullscreenTarget) await document.exitFullscreen();
+        else await fullscreenTarget.requestFullscreen();
+      } catch {
+        showToast("无法进入或退出全屏，请使用浏览器菜单");
+      } finally {
+        updateFullscreenButton();
+        fullscreenButton.disabled = false;
+      }
+    });
+    document.addEventListener("fullscreenchange", updateFullscreenButton);
+  }
 
   const phaseMap = () => {
     const now = new Date(), day = now.getDay(), minute = now.getHours() * 60 + now.getMinutes();

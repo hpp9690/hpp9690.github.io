@@ -161,6 +161,38 @@ input, select { accent-color: var(--accent); }
 .heatmap-directory { background: var(--surface-subtle); }
 .heatmap-sector-item { background: var(--surface); }
 
+#workspaceFullscreen { display: none; }
+
+@media (min-width: 960px) {
+  .wrap {
+    width: 100%;
+    max-width: none;
+    padding: 22px clamp(16px, 1.6vw, 36px) 40px;
+  }
+  .wrap > header { margin-bottom: 16px; }
+  .wrap > header h1 { font-size: clamp(32px, 2.5vw, 42px); }
+  .quick-nav-inner { display: flex; gap: 8px; }
+  .quick-nav #workspaceFullscreen:not([hidden]) {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    min-height: 38px;
+    padding-inline: 12px;
+    border-color: var(--line);
+    background: var(--surface-subtle);
+    color: var(--text);
+  }
+  .quick-nav #workspaceFullscreen:hover { background: var(--surface-hover); }
+  .heatmap-panel:not(:fullscreen) .heatmap-canvas { height: clamp(560px, 65vh, 1080px); }
+}
+
+@media (min-width: 1440px) {
+  .opportunity-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+html:fullscreen { overflow-y: auto; }
+html:fullscreen::backdrop { background: var(--bg); }
+
 @media (max-width: 720px) {
   .wrap { padding-top: 20px; }
   .wrap > header { flex-wrap: wrap; align-items: flex-start; margin-bottom: 14px; }
