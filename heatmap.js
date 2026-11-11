@@ -15,6 +15,7 @@
   shell.innerHTML = `<div class="heatmap-heading"><div><p class="eyebrow">A-SHARE MARKET MAP</p><h2>市场热力图</h2><p>面积代表成交额，颜色代表涨跌幅；点板块看成分股，点股票看详情。</p></div><span id="heatmapUpdated">等待行情快照</span></div><div class="heatmap-toolbar"><div class="heatmap-modes" role="group" aria-label="热力图视角"><button type="button" data-heat-mode="sector" class="active">板块总览</button><button type="button" data-heat-mode="top">成交额前列</button><button type="button" data-heat-mode="watch">关注清单</button></div><label>查看板块 <select id="heatmapSector"><option value="">全部板块</option></select></label></div><div class="heatmap-meta"><span id="heatmapSummary">正在建立行情快照</span><div class="heatmap-legend" aria-label="红涨绿跌图例"><span class="down3">≤−5%</span><span class="down2">−5%～−2%</span><span class="down1">−2%～0</span><span class="same">0</span><span class="up1">0～2%</span><span class="up2">2%～5%</span><span class="up3">≥5%</span></div></div><div id="heatmapCanvas" class="heatmap-canvas"><div class="heatmap-empty">交易日 09:15 后开始读取沪深主板行情</div></div><p class="heatmap-note">同一面积口径下比较成交活跃度；色阶展示当日涨跌，不代表趋势持续性。公开行情可能延迟或缺页。</p><div id="heatmapTip" class="heatmap-tip" hidden></div>`;
   shell.querySelector(".heatmap-toolbar").insertAdjacentHTML("beforeend", `<div class="heatmap-settings"><label>市场 <select id="heatmapUniverse"><option value="all">A股全图</option><option value="main">沪深主板</option></select></label><label>面积 <select id="heatmapSize"><option value="amount">成交额</option><option value="floatCap">流通市值</option></select></label></div>`);
   shell.querySelector(".heatmap-toolbar").insertAdjacentHTML("afterend", `<div class="heatmap-breadth" id="heatmapBreadth" aria-live="polite"><span>上涨 —</span><span>平盘 —</span><span>下跌 —</span><span>成交额 —</span></div>`);
+  shell.querySelector("#heatmapBreadth").insertAdjacentHTML("afterend", `<section class="heatmap-directory" aria-label="行业板块目录"><div class="heatmap-directory-head"><div><b>行业板块目录 <span id="heatmapSectorCount">—</span></b><small>小板块也能从这里找到，点名称查看成分股</small></div><div class="heatmap-directory-actions"><button type="button" id="heatmapBack" hidden>← 返回总览</button><button type="button" id="heatmapOpenConcept">查概念板块</button></div></div><input id="heatmapSectorSearch" type="search" autocomplete="off" placeholder="搜索行业名称" aria-label="搜索热力图行业板块"><div id="heatmapSectorItems" class="heatmap-sector-items"></div></section>`);
   shell.querySelector(".heatmap-heading").insertAdjacentHTML("beforeend", `<div class="heatmap-tools"><button type="button" id="heatmapFull">全屏盯盘</button><button type="button" id="heatmapExport">保存图片</button></div>`);
   shell.querySelector('[data-heat-mode="top"]').textContent = "权重前列";
   shell.querySelector(".heatmap-empty").textContent = "交易日 09:15 后开始读取 A 股行情";
@@ -22,6 +23,13 @@
 
   const canvas = $("#heatmapCanvas"), summary = $("#heatmapSummary"), sectorSelect = $("#heatmapSector"), tip = $("#heatmapTip");
   let snapshot = null, mode = "sector", selectedSector = "", sectors = [], tiles = [], universe = "all", sizeMetric = "amount";
+  const renderDirectory = () => {
+    const query = $("#heatmapSectorSearch").value.trim().toLowerCase();
+    const found = sectors.filter((item) => !query || item.name.toLowerCase().includes(query));
+    $("#heatmapSectorCount").textContent = `${sectors.length} 个`;
+    $("#heatmapBack").hidden = !selectedSector;
+    $("#heatmapSectorItems").innerHTML = found.length ? found.map((item) => `<button type="button" data-sector-name="${safe(item.name)}" class="heatmap-sector-item${selectedSector === item.name ? " active" : ""}"><i style="background:${colorFor(item.pct)}"></i><b>${safe(item.name)}</b><span class="${item.pct >= 0 ? "up" : "down"}">${safe(pctText(item.pct))}</span><small>${item.stocks.length}只</small></button>`).join("") : `<div class="heatmap-sector-empty">没有匹配的板块</div>`;
+  };
   const watchedCodes = () => {
     try { return new Set(JSON.parse(localStorage.getItem("quantLens.watchlist.v1") || "[]").map((item) => item.code)); }
     catch { return new Set(); }
@@ -57,11 +65,9 @@
     selectedSector = sectorSelect.value;
   };
   const buildSectors = (stocks) => {
-    const withName = stocks.filter((item) => item.sector && item.sector !== "-").length;
-    const useIndustry = withName >= stocks.length * .6;
     const groups = new Map();
     for (const item of stocks) {
-      const name = useIndustry ? (item.sector && item.sector !== "-" ? item.sector : "未分类") : band(item.pct);
+      const name = item.sector && item.sector !== "-" ? item.sector : "未分类";
       if (!groups.has(name)) groups.set(name, []);
       groups.get(name).push(item);
     }
@@ -113,7 +119,7 @@
       const index = tiles.indexOf(item), compact = w < 95 || h < 62, tiny = w < 54 || h < 36;
       const label = kind === "sector" ? item.name : item.name || item.code;
       const size = amountText(weight(item)), pct = pctText(item.pct), sizeName = sizeMetric === "amount" ? "成交额" : "流通市值";
-      return `<button type="button" class="heat-tile${compact ? " compact" : ""}${tiny ? " tiny" : ""}" data-heat-index="${index}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;width:${w.toFixed(1)}px;height:${h.toFixed(1)}px;background:${colorFor(item.pct)}" title="${safe(`${label} · ${pct} · ${sizeName} ${size}`)}" aria-label="${safe(`${label}，涨跌幅 ${pct}，${sizeName} ${size}`)}"><b>${safe(label)}</b><span>${safe(pct)}</span></button>`;
+      return `<button type="button" class="heat-tile${kind === "sector" ? " heat-sector-tile" : ""}${compact ? " compact" : ""}${tiny ? " tiny" : ""}${w < 38 || h < 25 ? " micro" : ""}" data-heat-index="${index}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;width:${w.toFixed(1)}px;height:${h.toFixed(1)}px;background:${colorFor(item.pct)}" title="${safe(`${label} · ${pct} · ${sizeName} ${size}`)}" aria-label="${safe(`${label}，涨跌幅 ${pct}，${sizeName} ${size}`)}"><b>${safe(label)}</b><span>${safe(pct)}</span></button>`;
     }).join("");
   };
   const setMode = (next) => {
@@ -121,14 +127,15 @@
     selectedSector = "";
     sectorSelect.value = "";
     shell.querySelectorAll("[data-heat-mode]").forEach((button) => button.classList.toggle("active", button.dataset.heatMode === next));
-    draw();
+    renderDirectory(); draw();
   };
   const rebuild = () => {
     if (!snapshot) return draw();
     sectors = buildSectors(universe === "all" ? snapshot.allStocks : snapshot.stocks);
     updateSectorOptions();
+    renderDirectory();
     shell.querySelector(".heatmap-heading p:last-child").textContent = `面积代表${sizeMetric === "amount" ? "成交额" : "流通市值"}，颜色代表涨跌幅；点板块看成分股，点股票看详情。`;
-    shell.querySelector(".heatmap-note").textContent = `板块面积为成分股${sizeMetric === "amount" ? "成交额" : "流通市值"}之和，颜色为相同口径加权涨跌幅。公开行情可能延迟或缺页。`;
+    shell.querySelector(".heatmap-note").textContent = `此图按股票所属行业分组；机器人、PCB 等概念请用“概念选股器”查询。板块面积为成分股${sizeMetric === "amount" ? "成交额" : "流通市值"}之和，颜色为加权涨跌幅。公开行情可能延迟或缺页。`;
     draw();
   };
   shell.querySelectorAll("[data-heat-mode]").forEach((button) => button.addEventListener("click", () => setMode(button.dataset.heatMode)));
@@ -180,15 +187,27 @@
     selectedSector = sectorSelect.value;
     mode = "sector";
     shell.querySelectorAll("[data-heat-mode]").forEach((button) => button.classList.toggle("active", button.dataset.heatMode === "sector"));
-    draw();
+    renderDirectory(); draw();
   });
+  $("#heatmapSectorSearch").addEventListener("input", renderDirectory);
+  $("#heatmapSectorItems").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-sector-name]");
+    if (!button) return;
+    selectedSector = button.dataset.sectorName;
+    mode = "sector";
+    sectorSelect.value = selectedSector;
+    shell.querySelectorAll("[data-heat-mode]").forEach((item) => item.classList.toggle("active", item.dataset.heatMode === "sector"));
+    renderDirectory(); draw();
+  });
+  $("#heatmapBack").addEventListener("click", () => { selectedSector = ""; sectorSelect.value = ""; renderDirectory(); draw(); });
+  $("#heatmapOpenConcept").addEventListener("click", () => document.dispatchEvent(new CustomEvent("quant:open-view", { detail: { id: "concept" } })));
   canvas.addEventListener("click", (event) => {
     const button = event.target.closest(".heat-tile"), item = tiles[Number(button?.dataset.heatIndex)];
     if (!item) return;
     if (mode === "sector" && !selectedSector) {
       selectedSector = item.name;
       sectorSelect.value = selectedSector;
-      draw();
+      renderDirectory(); draw();
       return;
     }
     document.dispatchEvent(new CustomEvent("quant:open-view", { detail: { id: "lookup" } }));
@@ -228,6 +247,6 @@
   document.addEventListener("quant:watchlist-changed", () => { if (mode === "watch") draw(); });
   document.addEventListener("quant:view-changed", (event) => { if (event.detail?.id === "heatmap") requestAnimationFrame(draw); else tip.hidden = true; });
   new ResizeObserver(() => { if (!shell.hidden) draw(); }).observe(canvas);
-  draw();
+  renderDirectory(); draw();
 })();
 
