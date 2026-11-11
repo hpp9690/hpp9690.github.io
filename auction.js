@@ -17,6 +17,45 @@
   const readHistory = () => { try { const x = JSON.parse(localStorage.getItem(storeKey) || "[]"); return Array.isArray(x) ? x : []; } catch { return []; } };
   const writeHistory = (x) => { try { localStorage.setItem(storeKey, JSON.stringify(x)); } catch {} };
   const pct = (n) => Number.isFinite(n) ? `${n > 0 ? "+" : ""}${n.toFixed(2)}%` : "—";
+  const safe = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+  const captureKey = "quantLens.auctionCapture.v1";
+  const capturePanel = document.createElement("section");
+  capturePanel.className = "auction-capture";
+  capturePanel.innerHTML = `<div class="capture-head"><div><b>09:20–09:25 竞价捕捉</b><small id="captureStatus">等待交易时段</small></div><span id="captureCount">0 只</span></div><div class="tablewrap"><table><thead><tr><th>股票</th><th>竞价涨幅</th><th>竞价额</th><th>变化</th><th>首次出现</th><th>最近更新</th></tr></thead><tbody id="captureRows"></tbody></table></div><div class="mobile-list" id="captureMobile"></div>`;
+  $("auctionPhase").after(capturePanel);
+  const readCaptures = () => { try { const x = JSON.parse(localStorage.getItem(captureKey) || "{}"); return x.date === dateTime().date && Array.isArray(x.rows) ? x.rows : []; } catch { return []; } };
+  let captures = readCaptures(), captureDate = dateTime().date, previous = new Map();
+  const saveCaptures = () => { try { localStorage.setItem(captureKey, JSON.stringify({ date: dateTime().date, rows: captures })); } catch {} };
+  const renderCaptures = (phase = phaseNow()) => {
+    const rows = [...captures].sort((a, b) => b.lastPct - a.lastPct || b.lastAmount - a.lastAmount).slice(0, 40);
+    $("captureCount").textContent = `${captures.length} 只`;
+    $("captureStatus").textContent = !phase.weekday ? "休市 · 等待下一交易日" : phase.hhmm < 920 ? "09:20 开始捕捉；09:20 前报价只供观察" : phase.hhmm < 925 ? "正在捕捉 · 约每 10 秒尝试刷新" : captures.length ? "竞价已结束 · 保留今日捕捉记录" : "今日暂无捕捉记录";
+    $("captureRows").innerHTML = rows.map((x) => `<tr><td class="zt-row-main"><b>${safe(x.name)}</b><small>${safe(x.code)}</small></td><td class="up">${pct(x.lastPct)}</td><td>${x.lastAmount > 0 ? amountFmt(x.lastAmount) : "待确认"}</td><td class="${x.delta >= 0 ? "up" : "down"}">${x.delta === null ? "首次出现" : `${x.delta > 0 ? "+" : ""}${x.delta.toFixed(2)} 个百分点`}</td><td>${safe(x.firstSeen)}</td><td>${safe(x.lastSeen)}</td></tr>`).join("") || `<tr><td colspan="6" class="zt-empty">09:20–09:25 出现的候选会保留在这里</td></tr>`;
+    $("captureMobile").innerHTML = rows.map((x) => `<article class="row"><div class="rowtop"><b>${safe(x.name)} <small>${safe(x.code)}</small></b><span class="up">${pct(x.lastPct)}</span></div><div class="rowmeta"><span>竞价额 ${x.lastAmount > 0 ? amountFmt(x.lastAmount) : "待确认"}</span><span>${x.delta === null ? "首次出现" : `变化 ${x.delta > 0 ? "+" : ""}${x.delta.toFixed(2)} 点`}</span></div><div class="why">首次 ${safe(x.firstSeen)} · 最近 ${safe(x.lastSeen)}</div></article>`).join("") || `<div class="zt-empty">09:20–09:25 出现的候选会保留在这里</div>`;
+  };
+  const capture = (rows, phase) => {
+    if (captureDate !== phase.date) { captures = []; previous.clear(); captureDate = phase.date; }
+    if (phase.hhmm < 920 || phase.hhmm >= 925 || !phase.weekday) { renderCaptures(phase); return; }
+    const now = Date.now(), byCode = new Map(captures.map((x) => [x.code, x]));
+    for (const x of rows) {
+      if (!mainBoard(x.f12) || /ST|退/.test(x.f14 || "") || !/^[0-9]{6}$/.test(x.f12) || !(Number(x.f2) > 0)) continue;
+      const quoteAt = Number(x.f124) * 1000;
+      if (!quoteAt || now - quoteAt > 90000 || quoteAt > now + 60000) continue;
+      const quoteTime = new Date(quoteAt).toLocaleTimeString("zh-CN", { timeZone: zone, hour12: false });
+      if (quoteTime < "09:20:00" || quoteTime >= "09:25:00") continue;
+      const change = Number(x.f3), amount = Number(x.f6) || 0;
+      if (!Number.isFinite(change)) continue;
+      const before = previous.get(x.f12), delta = before && quoteAt > before.at ? change - before.pct : null;
+      if (!before || quoteAt > before.at) previous.set(x.f12, { at: quoteAt, pct: change });
+      if (change < 3 || change > 10.2) continue;
+      const current = byCode.get(x.f12);
+      if (!current) byCode.set(x.f12, { code: x.f12, name: x.f14, firstSeen: phase.time, lastSeen: phase.time, lastPct: change, lastAmount: amount, delta });
+      else if (quoteAt > (current.quoteAt || 0)) Object.assign(current, { lastSeen: phase.time, lastPct: change, lastAmount: amount, delta, quoteAt });
+      if (!current) byCode.get(x.f12).quoteAt = quoteAt;
+    }
+    captures = [...byCode.values()].sort((a, b) => b.lastPct - a.lastPct).slice(0, 80);
+    saveCaptures(); renderCaptures(phase);
+  };
   function signal(s, liveAuction) {
     const change = s._scanPct, amount = s._scanAmount, turnover = s._scanTurnover, dist = Math.max(0, 10 - change);
     const score = Math.round(Math.max(0, Math.min(40, change * 4)) + Math.max(0, Math.min(35, Math.log10(Math.max(amount, 1) / 1e6) * 12)) + Math.max(0, Math.min(15, turnover * 3)) + Math.max(0, 10 - Math.max(0, dist) * 2));
@@ -106,6 +145,7 @@
   async function load() {
     if (loadBusy) return;
     const phase = phaseNow();
+    if (phase.hhmm < 920 || !phase.weekday) capture([], phase);
     if (phase.mode === "pre") {
       $("auctionUpdated").textContent = "竞价尚未开始";
       $("auctionPhase").textContent = "交易日 09:15 开始扫描；09:25 后自动保留并切换为开盘结果复盘。";
@@ -144,6 +184,7 @@
       let list = base.filter((x) => x._scanPct >= 3 && x._scanPct <= 10.2 && x._scanAmount >= minAmount);
       let relaxed = false;
       if (!list.length) { list = base.filter((x) => x._scanPct >= 1.5 && x._scanPct <= 10.2 && x._scanAmount >= 5e5); relaxed = true; }
+      capture(base, effective);
       render(list, effective);
       document.dispatchEvent(new CustomEvent("quant:market-snapshot", { detail: {
         date: marketDate, mode: effective.mode, capturedAt: Date.now(), scanned: deduped.length, total: first.total, missingPages: failed, partial: true, source: "fast",
@@ -158,7 +199,13 @@
   }
   $("auctionRefresh").onclick = load;
   $("reviewRefresh").onclick = () => updateReview(true);
-  renderReview(); load(); updateReview();
+  document.addEventListener("quant:market-snapshot", (event) => {
+    const next = event.detail, phase = phaseNow();
+    if (next?.source !== "full-batch" || next.date !== phase.date || phase.hhmm < 920 || phase.hhmm >= 925) return;
+    capture(next.stocks.map((x) => ({ f12: x.code, f14: x.name, f2: x.price, f3: x.pct, f6: x.amount, f124: x.quoteAt / 1000 })), phase);
+  });
+  renderReview(); renderCaptures(); load(); updateReview();
   setInterval(() => { load(); updateReview(); }, 30000);
+  setInterval(() => { const phase = phaseNow(); if (phase.weekday && phase.hhmm >= 920 && phase.hhmm < 925) load(); }, 10000);
 })();
 
