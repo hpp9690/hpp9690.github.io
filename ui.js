@@ -23,10 +23,12 @@
   const nav = document.createElement("nav");
   nav.className = "quick-nav";
   nav.setAttribute("aria-label", "功能快捷导航");
-  nav.innerHTML = `<div class="quick-nav-inner"><div class="quick-links">${sections.map(({ id, label }) => `<button type="button" data-target="${id}" aria-controls="${id}">${label}</button>`).join("")}</div><div class="quick-actions"><button type="button" id="refreshAll">全部刷新</button><button type="button" id="focusMode" aria-pressed="false">精简模式</button></div></div>`;
+  nav.innerHTML = `<div class="quick-nav-inner"><div class="quick-links">${sections.map(({ id, label }) => `<button type="button" data-target="${id}" aria-controls="${id}">${label}</button>`).join("")}</div></div>`;
   document.querySelector("header")?.after(nav);
 
   const validViews = new Set(sections.map((item) => item.id));
+  const links = $(".quick-links", nav);
+  const scrollBehavior = () => matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
   const activateView = (id, { remember = true, scroll = true } = {}) => {
     if (!validViews.has(id)) id = "opportunity";
     document.body.dataset.view = id;
@@ -41,9 +43,14 @@
     });
     const selected = document.getElementById(id);
     if (selected?.classList.contains("is-collapsed")) selected.querySelector(".section-toggle")?.click();
+    const currentButton = $('button[aria-current="page"]', links);
+    const visible = links.getBoundingClientRect();
+    const bounds = currentButton?.getBoundingClientRect();
+    if (bounds && bounds.left < visible.left) links.scrollLeft += bounds.left - visible.left - 3;
+    if (bounds && bounds.right > visible.right) links.scrollLeft += bounds.right - visible.right + 3;
     if (remember && location.hash !== `#${id}`) history.pushState(null, "", `#${id}`);
     document.dispatchEvent(new CustomEvent("quant:view-changed", { detail: { id } }));
-    if (scroll) nav.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (scroll) nav.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
   };
   document.addEventListener("quant:open-view", (event) => activateView(event.detail?.id));
 
@@ -52,6 +59,7 @@
   desk.setAttribute("aria-label", "今日决策工作台");
   desk.innerHTML = `<div class="desk-phase"><p class="eyebrow">TODAY'S TRADING DESK</p><div class="phase-line"><i id="phaseDot"></i><div><b id="phaseName">判断交易阶段</b><small id="phaseHint">根据当前时间给出操作顺序</small></div></div></div><div class="desk-center"><div class="desk-metrics"><span id="visibleSummary">候选载入中</span><span id="dataHealth">检查数据源</span></div><div class="workflow-actions" aria-label="快捷场景"><button type="button" data-workflow="auction">竞价强势</button><button type="button" data-workflow="first">首板机会</button><button type="button" data-workflow="multi">连板接力</button><button type="button" data-workflow="broken">炸板风险</button><button type="button" data-workflow="liquid">高流动性</button></div></div><div class="desk-watch"><button type="button" id="watchToggle" aria-expanded="false">★ 关注清单 <span id="watchCount">0</span></button><div class="watch-panel" id="watchPanel" hidden><div class="watch-panel-head"><b>重点观察</b><div><button type="button" id="copyWatch">复制代码</button><button type="button" id="clearWatch">清空</button></div></div><div id="watchItems"></div><p>星标仅保存在当前浏览器，不会自动交易。</p></div></div>`;
   nav.after(desk);
+  $(".desk-phase > .eyebrow", desk).textContent = "交易时段";
 
   const toast = document.createElement("div");
   toast.className = "ui-toast";
@@ -188,16 +196,24 @@
   updateDeskMetrics();
   document.addEventListener("quant:lookup-rendered", renderWatch);
 
-  $("#watchToggle")?.addEventListener("click", () => {
-    const panel = $("#watchPanel"), open = panel.hidden;
-    panel.hidden = !open;
-    $("#watchToggle").setAttribute("aria-expanded", String(open));
+  const watchToggle = $("#watchToggle"), watchPanel = $("#watchPanel");
+  watchToggle.setAttribute("aria-controls", "watchPanel");
+  const setWatchOpen = (open) => {
+    watchPanel.hidden = !open;
+    watchToggle.setAttribute("aria-expanded", String(open));
+  };
+  watchToggle.addEventListener("click", () => setWatchOpen(watchPanel.hidden));
+  document.addEventListener("click", (event) => {
+    if (!watchPanel.hidden && !event.target.closest(".desk-watch")) setWatchOpen(false);
   });
   $("#watchItems")?.addEventListener("click", (event) => {
     const remove = event.target.closest("[data-remove-watch]");
     if (remove) return toggleWatch(remove.dataset.removeWatch, watched.find((item) => item.code === remove.dataset.removeWatch)?.name);
     const stock = event.target.closest("[data-watch-code]");
-    if (stock) searchStock(stock.dataset.watchCode);
+    if (stock) {
+      setWatchOpen(false);
+      searchStock(stock.dataset.watchCode);
+    }
   });
   $("#copyWatch")?.addEventListener("click", async () => {
     if (!watched.length) return showToast("关注清单还是空的");
@@ -272,11 +288,12 @@
 
   $("#refreshAll")?.addEventListener("click", () => {
     ["refresh", "auctionRefresh", "ztRefresh", "reviewRefresh"].forEach((id) => document.getElementById(id)?.click());
+    document.dispatchEvent(new Event("quant:refresh-market"));
     showToast("行情与候选正在刷新");
   });
 
   document.addEventListener("click", (event) => {
-    const refresh = event.target.closest("#refresh,#auctionRefresh,#ztRefresh,#reviewRefresh");
+    const refresh = event.target.closest("#refreshAll,#refresh,#auctionRefresh,#ztRefresh,#reviewRefresh");
     if (refresh) {
       refresh.classList.add("is-refreshing");
       setTimeout(() => refresh.classList.remove("is-refreshing"), 1200);
@@ -306,7 +323,7 @@
     activateView("lookup");
     setTimeout(() => $("#stockSearch")?.focus(), 350);
   });
-  $("#backTop")?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  $("#backTop")?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: scrollBehavior() }));
 
   let scrollQueued = false;
   const updateScroll = () => {
@@ -319,15 +336,16 @@
   updateScroll();
 
   addEventListener("keydown", (event) => {
-    if (event.key === "/" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) {
+    if (event.defaultPrevented || $("dialog[open]")) return;
+    const editing = document.activeElement?.matches("input, textarea, select, [contenteditable]");
+    if (event.key === "/" && !editing && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
       activateView("lookup");
       $("#stockSearch")?.focus();
     }
-    if (event.key === "Escape") {
-      const suggestions = $("#suggestions");
-      if (suggestions) suggestions.hidden = true;
-      document.activeElement?.blur?.();
+    if (event.key === "Escape" && !watchPanel.hidden) {
+      setWatchOpen(false);
+      watchToggle.focus();
     }
   });
   const viewFromHash = () => location.hash.slice(1);

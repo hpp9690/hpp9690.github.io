@@ -99,6 +99,7 @@
   setInterval(() => { if (shouldPoll()) fullScan(); }, 90000);
   setInterval(() => { if (shouldPoll()) watchScan(); }, 15000);
   document.addEventListener("quant:watchlist-changed", watchScan);
+  document.addEventListener("quant:refresh-market", () => { fullScan(); watchScan(); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { fullScan(); watchScan(); } });
 })();
 

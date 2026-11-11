@@ -3,8 +3,9 @@
   const safe = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const amountText = (value) => value >= 1e8 ? `${(value / 1e8).toFixed(1)} 亿` : `${(value / 1e4).toFixed(0)} 万`;
   const pctText = (value) => `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
-  const colors = { up3: "#b9414b", up2: "#963842", up1: "#6b343e", same: "#344454", down1: "#245b51", down2: "#277b66", down3: "#2d9b7d" };
+  const colors = { up3: "#a82e43", up2: "#f6b0b8", up1: "#fbe7ea", same: "#e9edf2", down1: "#e1f3eb", down2: "#a5dfca", down3: "#12634b" };
   const colorFor = (pct) => pct >= 5 ? colors.up3 : pct >= 2 ? colors.up2 : pct > 0 ? colors.up1 : pct <= -5 ? colors.down3 : pct <= -2 ? colors.down2 : pct < 0 ? colors.down1 : colors.same;
+  const strongTone = (pct) => Math.abs(pct) >= 5;
   const band = (pct) => pct >= 9.5 ? "涨停附近" : pct >= 3 ? "强势上涨" : pct > 0 ? "温和上涨" : pct === 0 ? "平盘" : pct > -3 ? "温和下跌" : "明显下跌";
   const shell = document.createElement("section");
   shell.id = "heatmap";
@@ -119,7 +120,8 @@
       const index = tiles.indexOf(item), compact = w < 95 || h < 62, tiny = w < 54 || h < 36;
       const label = kind === "sector" ? item.name : item.name || item.code;
       const size = amountText(weight(item)), pct = pctText(item.pct), sizeName = sizeMetric === "amount" ? "成交额" : "流通市值";
-      return `<button type="button" class="heat-tile${kind === "sector" ? " heat-sector-tile" : ""}${compact ? " compact" : ""}${tiny ? " tiny" : ""}${w < 38 || h < 25 ? " micro" : ""}" data-heat-index="${index}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;width:${w.toFixed(1)}px;height:${h.toFixed(1)}px;background:${colorFor(item.pct)}" title="${safe(`${label} · ${pct} · ${sizeName} ${size}`)}" aria-label="${safe(`${label}，涨跌幅 ${pct}，${sizeName} ${size}`)}"><b>${safe(label)}</b><span>${safe(pct)}</span></button>`;
+      const tone = strongTone(item.pct) ? " strong-tone" : "";
+      return `<button type="button" class="heat-tile${tone}${kind === "sector" ? " heat-sector-tile" : ""}${compact ? " compact" : ""}${tiny ? " tiny" : ""}${w < 38 || h < 25 ? " micro" : ""}" data-heat-index="${index}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;width:${w.toFixed(1)}px;height:${h.toFixed(1)}px;background:${colorFor(item.pct)}" title="${safe(`${label} · ${pct} · ${sizeName} ${size}`)}" aria-label="${safe(`${label}，涨跌幅 ${pct}，${sizeName} ${size}`)}"><b>${safe(label)}</b><span>${safe(pct)}</span></button>`;
     }).join("");
   };
   const setMode = (next) => {
@@ -157,17 +159,17 @@
     picture.width = width; picture.height = height;
     const context = picture.getContext("2d");
     if (!context) return;
-    context.fillStyle = "#0b1018"; context.fillRect(0, 0, width, height);
-    context.fillStyle = "#eef3f8"; context.font = "bold 28px sans-serif";
+    context.fillStyle = "#ffffff"; context.fillRect(0, 0, width, height);
+    context.fillStyle = "#182230"; context.font = "bold 28px sans-serif";
     context.fillText("A股市场热力图", 24, 40);
-    context.fillStyle = "#9eafb9"; context.font = "16px sans-serif";
+    context.fillStyle = "#526071"; context.font = "16px sans-serif";
     context.fillText(`${summary.textContent} · ${$("#heatmapUpdated").textContent}`, 24, 72);
     const kind = mode === "sector" && !selectedSector ? "sector" : "stock";
     for (const { item, x, y, width: w, height: h } of layout([...tiles].sort((a, b) => weight(b) - weight(a)), 0, top, width, height - top - 30)) {
       context.fillStyle = colorFor(item.pct); context.fillRect(x + 2, y + 2, Math.max(0, w - 4), Math.max(0, h - 4));
       if (w < 66 || h < 40) continue;
       context.save(); context.beginPath(); context.rect(x + 4, y + 4, w - 8, h - 8); context.clip();
-      context.textAlign = "center"; context.fillStyle = "#fff"; context.font = "bold 14px sans-serif";
+      context.textAlign = "center"; context.fillStyle = strongTone(item.pct) ? "#fff" : "#202c3b"; context.font = "bold 14px sans-serif";
       let name = kind === "sector" ? item.name : item.name || item.code;
       while (name.length > 1 && context.measureText(name).width > w - 14) name = name.slice(0, -1);
       const center = x + w / 2, middle = y + h / 2;
@@ -175,7 +177,7 @@
       if (h > 56) { context.font = "12px sans-serif"; context.fillText(pctText(item.pct), center, middle + 16); }
       context.restore();
     }
-    context.textAlign = "left"; context.fillStyle = "#8c9bac"; context.font = "12px sans-serif";
+    context.textAlign = "left"; context.fillStyle = "#526071"; context.font = "12px sans-serif";
     context.fillText(`面积：${sizeMetric === "amount" ? "成交额" : "流通市值"} · 红涨绿跌 · 数据仅供研究`, 24, height - 8);
     const blob = await new Promise((resolve) => picture.toBlob(resolve, "image/png"));
     if (!blob) return;
