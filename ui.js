@@ -4,6 +4,7 @@
   const findCard = (title) => cards.find((card) => card.querySelector("h2")?.textContent.includes(title));
   const sections = [
     { id: "opportunity", label: "潜在机会", el: null },
+    { id: "concept", label: "概念选股", el: null },
     { id: "anomaly", label: "异动捕捉", el: null },
     { id: "heatmap", label: "市场热力图", el: null },
     { id: "lookup", label: "个股查询", el: $(".top-lookup") },
