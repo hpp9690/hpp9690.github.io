@@ -6,11 +6,13 @@
     { id: "opportunity", label: "潜在机会", el: null },
     { id: "concept", label: "概念选股", el: null },
     { id: "anomaly", label: "异动捕捉", el: null },
+    { id: "review", label: "信号复盘", el: null },
     { id: "heatmap", label: "市场热力图", el: null },
     { id: "lookup", label: "个股查询", el: $(".top-lookup") },
     { id: "auction", label: "竞价候选", el: $(".auction") },
     { id: "limitup", label: "涨停雷达", el: $(".limitup") },
     { id: "watchlist", label: "候选扫描", el: findCard("候选扫描") },
+    { id: "notes", label: "研究笔记", el: null },
     { id: "guide", label: "评分逻辑", el: $(".guide") }
   ];
 

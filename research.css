@@ -1,0 +1,108 @@
+.stock-research-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(270px, 1fr);
+  gap: 14px;
+  margin: 16px 0 12px;
+  align-items: start;
+}
+
+.stock-research-side { display: grid; gap: 14px; min-width: 0; }
+.stock-detail-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.stock-detail-nav button { min-height: 33px; padding: 4px 10px; border-radius: 999px; color: var(--accent-strong); font-size: 12px; }
+.stock-research-grid :is(.stock-technical, .stock-concepts, .stock-notices) { scroll-margin-top: 65px; }
+.stock-research-side .stock-concepts { margin: 0; }
+.stock-note-add { margin-left: auto; min-height: 30px; padding: 4px 9px; font-size: 12px; white-space: nowrap; }
+.stock-technical, .stock-notices {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-subtle);
+}
+.stock-technical h4, .stock-notices h4 { margin: 0; font-size: 15px; }
+.technical-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.technical-head small { color: var(--muted); font-size: 11px; }
+.technical-period { width: auto; margin: 0; }
+.technical-period button { min-height: 32px; padding: 4px 9px; font-size: 12px; }
+.technical-metrics, .signal-results { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 11px; }
+.technical-metrics > div, .signal-results > div { padding: 8px; min-width: 0; border-radius: 9px; background: var(--surface); }
+.technical-metrics small, .signal-results small { display: block; color: var(--muted); font-size: 11px; }
+.technical-metrics b, .signal-results b { font-size: 13px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.technical-legend { display: flex; flex-wrap: wrap; gap: 10px; padding-block: 11px 7px; color: var(--muted); font-size: 11px; }
+.technical-legend span::before { display: inline-block; width: 10px; height: 2px; margin-right: 5px; vertical-align: middle; background: var(--ma-color); content: ""; }
+.technical-chart { display: block; width: 100%; height: clamp(220px, 30vh, 360px); border-radius: 8px; background: var(--surface); }
+.technical-bar { min-height: 20px; margin: 8px 0 0; color: var(--text); font-size: 11px; font-variant-numeric: tabular-nums; }
+.stock-notice-list { display: grid; gap: 6px; margin-top: 9px; font-size: 12px; color: var(--muted); }
+.stock-notice-list a { display: flex; flex-direction: column; gap: 2px; padding: 7px 9px; border-radius: 8px; background: var(--surface); color: var(--accent-strong); overflow-wrap: anywhere; text-decoration: none; }
+.stock-notice-list a:hover { background: var(--surface-accent); text-decoration: underline; }
+.stock-notice-list small { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.research-panel { padding: clamp(16px, 2vw, 28px); scroll-margin-top: 66px; }
+.research-head, .research-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.research-head h2, .research-sources-heading, .research-note h4 { margin: 0; }
+.research-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.research-badge { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; background: var(--surface-accent); color: var(--accent-strong); font-size: 11px; }
+.research-filters, .research-note-search { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.research-filters label, .research-note-search label { color: var(--muted); font-size: 12px; }
+.signal-review-list, .research-notes-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr));
+  gap: 10px;
+}
+.signal-review-card, .research-note { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-subtle); }
+.signal-review-card .research-row button { padding: 5px 9px; background: var(--surface); }
+.signal-review-card p, .research-note p { margin: 7px 0; overflow-wrap: anywhere; font-size: 13px; }
+.signal-review-card .signal-stamps { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.signal-results { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.signal-results small + b { display: block; margin-top: 3px; }
+.signal-review-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 11px; }
+.signal-review-summary:empty { display: none; }
+.signal-review-summary > div { padding: 8px 10px; border-radius: 9px; background: var(--surface-accent); }
+.signal-review-summary small, .signal-review-summary b { display: block; color: var(--accent-strong); font-size: 12px; }
+.signal-review-summary small { color: var(--muted); font-size: 11px; }
+.research-empty { grid-column: 1 / -1; padding: 30px 12px; text-align: center; color: var(--muted); background: var(--surface-subtle); border-radius: 12px; }
+.research-foot, .research-status { margin: 12px 0 0; color: var(--muted); font-size: 12px; }
+.research-status:empty { display: none; }
+#reviewSignalMore, #restoreResearchNote { margin-top: 10px; }
+.research-sources-heading { margin-top: 22px; }
+.research-sources-heading + .research-foot { margin: 4px 0 10px; }
+.research-note h4 { font-size: 14px; overflow-wrap: anywhere; }
+.research-note h4 small { color: var(--muted); }
+.research-note p { white-space: pre-wrap; }
+.research-note .research-evidence { padding: 8px; background: var(--surface); border-radius: 8px; color: var(--muted); }
+.research-note .research-row a { font-size: 12px; color: var(--accent-strong); }
+.research-note .research-row button { min-height: 32px; padding: 5px 8px; font-size: 12px; }
+.research-note .research-note-actions { justify-content: flex-end; }
+.research-note-actions a { margin-right: auto; }
+#researchNoteForm { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-subtle); }
+.research-note-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 10px; }
+.research-note-fields label { display: grid; gap: 3px; min-width: 0; color: var(--muted); font-size: 12px; }
+.research-wide { grid-column: 1 / -1; }
+.research-panel input, .research-panel textarea {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.research-panel textarea { resize: vertical; }
+.research-primary { background: var(--accent-button); border-color: var(--accent-button); color: white; }
+.anomaly-item { grid-template-columns: 53px minmax(90px, 1fr) auto; }
+.anomaly-detail small { display: block; margin-top: 3px; }
+
+@media (max-width: 760px) {
+  .stock-research-grid { grid-template-columns: minmax(0, 1fr); }
+  .stock-technical, .stock-notices { padding: 11px; }
+  .technical-chart { height: 240px; }
+  .research-note-fields { grid-template-columns: minmax(0, 1fr); }
+  .research-panel input, .research-panel textarea { font-size: 16px; }
+}
+@media (max-width: 390px) {
+  .signal-results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .signal-review-summary b { font-size: 11px; }
+  .technical-metrics b { font-size: 12px; }
+}
+
+

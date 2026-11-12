@@ -1,5 +1,6 @@
 (() => {
   const zone = "Asia/Shanghai";
+  const timeFormat = new Intl.DateTimeFormat("zh-CN", { timeZone: zone, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
   const $ = (selector) => document.querySelector(selector);
   const safe = (value) => String(value || "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const clock = () => {
@@ -55,39 +56,47 @@
   const render = () => {
     const filtered = onlyWatch ? alerts.filter((x) => watched().has(x.code)) : alerts;
     $("#anomalyCount").textContent = filtered.length;
-    $("#anomalyFeed").innerHTML = filtered.length ? filtered.map((x) => `<button type="button" class="anomaly-item ${x.level}" data-code="${safe(x.code)}"><span class="anomaly-time">${safe(x.time)}</span><span class="anomaly-name"><b>${safe(x.name)}</b><small>${safe(x.code)}</small></span><span class="anomaly-type">${safe(x.label)}</span><span class="anomaly-detail">${safe(x.detail)}</span></button>`).join("") : `<div class="anomaly-empty">${onlyWatch ? "关注清单暂无新异动" : "等待新的异动信号"}</div>`;
+    $("#anomalyFeed").innerHTML = filtered.length ? filtered.map((x) => `<button type="button" class="anomaly-item ${x.level}" data-code="${safe(x.code)}"><span class="anomaly-time">${safe(x.time)}</span><span class="anomaly-name"><b>${safe(x.name)}</b><small>${safe(x.code)}</small></span><span class="anomaly-type">${safe(x.label)}</span><span class="anomaly-detail">${safe(x.detail)}${x.quoteAt ? `<small>报价 ${timeFormat.format(x.quoteAt)} · 触发 ${safe(x.time)}</small>` : ""}</span></button>`).join("") : `<div class="anomaly-empty">${onlyWatch ? "关注清单暂无新异动" : "等待新的异动信号"}</div>`;
   };
   const status = () => {
-    const t = clock(), active = isMarketTime(t), age = lastMarketAt ? Math.round((Date.now() - lastMarketAt) / 1000) : 0;
+    const t = clock(), active = isMarketTime(t), age = lastMarketAt ? Math.max(0, Math.round((Date.now() - lastMarketAt) / 1000)) : 0;
     const boardAge = lastBoardAt ? Math.round((Date.now() - lastBoardAt) / 1000) : 0;
-    const label = !active ? "非连续监测时段 · 保留当日记录" : !lastMarketAt ? "正在建立股票行情基线" : age > 120 ? `股票行情已 ${age} 秒未更新 · 涨停榜 ${boardAge || "—"} 秒前` : `监测中 · 股票 ${age} 秒前 · ${coverage ? coverage + " · " : ""}关注约15秒／全市场约90秒`;
+    const label = !active ? "非连续监测时段 · 保留当日记录" : !lastMarketAt ? "等待有效股票报价" : age > 90 ? `最新报价已过 ${age} 秒 · 涨停榜 ${boardAge || "—"} 秒前` : `最新报价 ${timeFormat.format(lastMarketAt)} · ${age} 秒前 · 沪深主板${coverage ? " · " + coverage : ""}`;
     $("#anomalyState").textContent = label;
-    shell.classList.toggle("stale", active && !!lastMarketAt && age > 120);
+    shell.classList.toggle("stale", active && !!lastMarketAt && age > 90);
   };
   const add = (type, row, label, detail, level = "signal") => {
-    const t = clock(), key = `${t.date}:${row.code}:${type}`;
-    if ((cooldown.get(key) || 0) > Date.now() - 600000) return;
-    cooldown.set(key, Date.now());
-    const alert = { type, code: row.code, name: row.name || row.code, label, detail, level, time: t.time, at: Date.now() };
+    const t = clock(), key = `${t.date}:${row.code}:${type}`, seenAt = Date.now();
+    if ((cooldown.get(key) || 0) > seenAt - 600000) return;
+    cooldown.set(key, seenAt);
+    const alert = { type, code: row.code, name: row.name || row.code, label, detail, level, time: timeFormat.format(seenAt), at: seenAt, quoteAt: row.quoteAt };
     alerts.unshift(alert); alerts = alerts.slice(0, 30);
     persist(); render(); beep(); notifyDesktop(alert);
+    if (type === "surge" || type === "volume") document.dispatchEvent(new CustomEvent("quant:signal", {
+      detail: { type, code: row.code, name: row.name, price: Number(row.price), quoteAt: Number(row.quoteAt), seenAt, reason: detail }
+    }));
     if (document.visibilityState !== "visible") { unread++; document.title = `(${unread}) ${title}`; }
   };
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { unread = 0; document.title = title; } });
   document.addEventListener("quant:market-snapshot", (event) => {
     const next = event.detail, t = clock();
     if (!next || next.date !== t.date || next.mode === "review" || !Array.isArray(next.stocks) || !next.stocks.length) return;
-    lastMarketAt = Date.now();
     if (!next.partial && Number(next.total)) coverage = `主板 ${next.stocks.length} 只 · 行情 ${next.scanned}/${next.total}`;
-    status();
+    if (!isMarketTime(t)) return status();
+    const now = Date.now();
+    const session = t.minutes < 565 ? "09:15" : t.minutes < 690 ? "09:30" : "13:00";
+    const sessionStart = Date.parse(`${t.date}T${session}:00+08:00`);
     for (const row of next.stocks) {
       if (!/^\d{6}$/.test(row.code) || !Number.isFinite(row.pct) || !Number.isFinite(row.amount)) continue;
-      const at = Number(row.quoteAt) || Number(next.capturedAt) || Date.now();
-      if (Date.now() - at > 180000 || at > Date.now() + 60000) continue;
-      const before = priorMarket.get(row.code);
-      if (before && before.date === next.date && before.at >= at) continue;
+      const at = Number(row.quoteAt);
+      if (!Number.isFinite(at) || at < sessionStart || now - at > 90000 || at > now + 5000) continue;
+      lastMarketAt = Math.max(lastMarketAt, at);
+      const history = priorMarket.get(row.code) || [];
+      if (history.at(-1)?.at >= at) continue;
+      const recent = history.filter((quote) => quote.at >= sessionStart && at - quote.at <= 180000);
+      const before = recent.findLast((quote) => at - quote.at >= 8000);
       const seconds = before ? (at - before.at) / 1000 : 0;
-      if (before && row.amount >= before.amount && seconds >= 10 && seconds <= 180 && isMarketTime(t)) {
+      if (before && row.amount >= before.amount && seconds >= 8 && seconds <= 180) {
         const move = row.pct - before.pct, traded = row.amount - before.amount;
         if (t.minutes >= 555 && t.minutes < 565) {
           if (t.minutes >= 560 && before.pct < 3 && row.pct >= 3 && row.amount >= 1000000)
@@ -99,8 +108,14 @@
             add("volume", row, "放量走强", `${Math.round(seconds)} 秒新增成交 ${(traded / 1e6).toFixed(1)} 百万 · 涨幅 ${row.pct.toFixed(2)}%`);
         }
       }
-      priorMarket.set(row.code, { date: next.date, at, pct: row.pct, amount: row.amount });
+      recent.push({ at, pct: row.pct, amount: row.amount });
+      priorMarket.set(row.code, recent);
     }
+    status();
+  });
+  document.addEventListener("quant:signal", (event) => {
+    const signal = event.detail;
+    if (signal?.type === "auction-early") add("auction-early", signal, "竞价提前转强", signal.reason);
   });
   document.addEventListener("quant:market-health", (event) => {
     marketHealth = event.detail;

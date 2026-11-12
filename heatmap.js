@@ -242,8 +242,10 @@
     const stocks = next.stocks.filter(validStock);
     const allStocks = Array.isArray(next.allStocks) ? next.allStocks.filter(validStock) : stocks;
     snapshot = { ...next, stocks, allStocks };
-    updated.textContent = `${next.date} · ${next.mode === "review" ? "复盘" : "行情快照"} · ${new Date(next.capturedAt).toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" })}`;
-    updated.classList.toggle("partial", incomingCoverage < .8);
+    const stamp = next.quotedAt || next.capturedAt;
+    const kind = next.source === "cache" ? "本地缓存快照" : next.mode === "review" ? "复盘快照" : "行情快照";
+    updated.textContent = `${next.date} · ${kind} · ${next.quotedAt ? "报价" : "读取"} ${new Date(stamp).toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" })}`;
+    updated.classList.toggle("partial", next.source === "cache" || incomingCoverage < .8);
     rebuild();
   });
   document.addEventListener("quant:watchlist-changed", () => { if (mode === "watch") draw(); });

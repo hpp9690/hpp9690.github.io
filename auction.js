@@ -30,28 +30,47 @@
     const rows = [...captures].sort((a, b) => b.lastPct - a.lastPct || b.lastAmount - a.lastAmount).slice(0, 40);
     $("captureCount").textContent = `${captures.length} 只`;
     $("captureStatus").textContent = !phase.weekday ? "休市 · 等待下一交易日" : phase.hhmm < 920 ? "09:20 开始捕捉；09:20 前报价只供观察" : phase.hhmm < 925 ? "正在捕捉 · 约每 10 秒尝试刷新" : captures.length ? "竞价已结束 · 保留今日捕捉记录" : "今日暂无捕捉记录";
-    $("captureRows").innerHTML = rows.map((x) => `<tr><td class="zt-row-main"><b>${safe(x.name)}</b><small>${safe(x.code)}</small></td><td class="up">${pct(x.lastPct)}</td><td>${x.lastAmount > 0 ? amountFmt(x.lastAmount) : "待确认"}</td><td class="${x.delta >= 0 ? "up" : "down"}">${x.delta === null ? "首次出现" : `${x.delta > 0 ? "+" : ""}${x.delta.toFixed(2)} 个百分点`}</td><td>${safe(x.firstSeen)}</td><td>${safe(x.lastSeen)}</td></tr>`).join("") || `<tr><td colspan="6" class="zt-empty">09:20–09:25 出现的候选会保留在这里</td></tr>`;
-    $("captureMobile").innerHTML = rows.map((x) => `<article class="row"><div class="rowtop"><b>${safe(x.name)} <small>${safe(x.code)}</small></b><span class="up">${pct(x.lastPct)}</span></div><div class="rowmeta"><span>竞价额 ${x.lastAmount > 0 ? amountFmt(x.lastAmount) : "待确认"}</span><span>${x.delta === null ? "首次出现" : `变化 ${x.delta > 0 ? "+" : ""}${x.delta.toFixed(2)} 点`}</span></div><div class="why">首次 ${safe(x.firstSeen)} · 最近 ${safe(x.lastSeen)}</div></article>`).join("") || `<div class="zt-empty">09:20–09:25 出现的候选会保留在这里</div>`;
+    $("captureRows").innerHTML = rows.map((x) => `<tr><td class="zt-row-main"><b>${safe(x.name)}</b><small>${safe(x.code)} · ${x.type === "auction-early" ? "竞价转强" : "竞价强势"}</small></td><td class="${x.lastPct >= 0 ? "up" : "down"}">${pct(x.lastPct)}</td><td>${x.lastAmount > 0 ? amountFmt(x.lastAmount) : "待确认"}</td><td class="${x.delta >= 0 ? "up" : "down"}">${x.delta === null ? "首次出现" : `${x.delta > 0 ? "+" : ""}${x.delta.toFixed(2)} 个百分点`}</td><td>${safe(x.firstSeen)}</td><td>${safe(x.lastSeen)}</td></tr>`).join("") || `<tr><td colspan="6" class="zt-empty">09:20–09:25 出现的候选会保留在这里</td></tr>`;
+    $("captureMobile").innerHTML = rows.map((x) => `<article class="row"><div class="rowtop"><b>${safe(x.name)} <small>${safe(x.code)}</small></b><span class="${x.lastPct >= 0 ? "up" : "down"}">${pct(x.lastPct)}</span></div><div class="rowmeta"><span>${x.type === "auction-early" ? "竞价转强" : "竞价强势"}</span><span>竞价额 ${x.lastAmount > 0 ? amountFmt(x.lastAmount) : "待确认"}</span><span>${x.delta === null ? "首次出现" : `变化 ${x.delta > 0 ? "+" : ""}${x.delta.toFixed(2)} 点`}</span></div><div class="why">首次 ${safe(x.firstSeen)} · 最近 ${safe(x.lastSeen)}</div></article>`).join("") || `<div class="zt-empty">09:20–09:25 出现的候选会保留在这里</div>`;
   };
   const capture = (rows, phase) => {
     if (captureDate !== phase.date) { captures = []; previous.clear(); captureDate = phase.date; }
     if (phase.hhmm < 920 || phase.hhmm >= 925 || !phase.weekday) { renderCaptures(phase); return; }
     const now = Date.now(), byCode = new Map(captures.map((x) => [x.code, x]));
     for (const x of rows) {
-      if (!mainBoard(x.f12) || /ST|退/.test(x.f14 || "") || !/^[0-9]{6}$/.test(x.f12) || !(Number(x.f2) > 0)) continue;
+      if (!mainBoard(x.f12) || /ST|退|^[NC]/.test(x.f14 || "") || !/^[0-9]{6}$/.test(x.f12) || !(Number(x.f2) > 0)) continue;
       const quoteAt = Number(x.f124) * 1000;
-      if (!quoteAt || now - quoteAt > 90000 || quoteAt > now + 60000) continue;
+      if (!quoteAt || now - quoteAt > 90000 || quoteAt > now + 5000) continue;
       const quoteTime = new Date(quoteAt).toLocaleTimeString("zh-CN", { timeZone: zone, hour12: false });
       if (quoteTime < "09:20:00" || quoteTime >= "09:25:00") continue;
       const change = Number(x.f3), amount = Number(x.f6) || 0;
       if (!Number.isFinite(change)) continue;
-      const before = previous.get(x.f12), delta = before && quoteAt > before.at ? change - before.pct : null;
-      if (!before || quoteAt > before.at) previous.set(x.f12, { at: quoteAt, pct: change });
-      if (change < 3 || change > 10.2) continue;
+      const history = previous.get(x.f12) || [];
+      if (history.at(-1)?.at >= quoteAt) continue;
+      const recent = history.filter((quote) => quoteAt - quote.at <= 90000);
+      const before = recent.findLast((quote) => quoteAt - quote.at >= 8000);
+      const delta = before ? change - before.pct : null;
+      recent.push({ at: quoteAt, pct: change, amount });
+      previous.set(x.f12, recent);
       const current = byCode.get(x.f12);
-      if (!current) byCode.set(x.f12, { code: x.f12, name: x.f14, firstSeen: phase.time, lastSeen: phase.time, lastPct: change, lastAmount: amount, delta });
-      else if (quoteAt > (current.quoteAt || 0)) Object.assign(current, { lastSeen: phase.time, lastPct: change, lastAmount: amount, delta, quoteAt });
-      if (!current) byCode.get(x.f12).quoteAt = quoteAt;
+      if (current) {
+        if (quoteAt > (current.quoteAt || 0)) Object.assign(current, { lastSeen: quoteTime, lastPct: change, lastAmount: amount, delta, quoteAt });
+        continue;
+      }
+      const elapsed = before ? quoteAt - before.at : 0;
+      const early = change >= 1 && change < 3 && elapsed >= 8000 && elapsed <= 90000 &&
+        delta >= .4 - 1e-8 && amount >= 500000 && amount - before.amount >= 200000;
+      const strong = change >= 3 && change <= 10.2;
+      if (!early && !strong) continue;
+      const type = early ? "auction-early" : "auction-strong";
+      const firstSeen = new Date(now).toLocaleTimeString("zh-CN", { timeZone: zone, hour12: false });
+      byCode.set(x.f12, { code: x.f12, name: x.f14, firstSeen, lastSeen: quoteTime, lastPct: change, lastAmount: amount, delta, quoteAt, type });
+      const reason = early
+        ? `${Math.round(elapsed / 1000)} 秒涨幅增加 ${delta.toFixed(2)} 个百分点，参考金额增加 ${Math.round((amount - before.amount) / 10000)} 万`
+        : `竞价参考涨幅 ${pct(change)}，参考金额 ${amount > 0 ? amountFmt(amount) : "待确认"}`;
+      document.dispatchEvent(new CustomEvent("quant:signal", {
+        detail: { type, code: x.f12, name: x.f14, price: Number(x.f2), quoteAt, seenAt: now, reason }
+      }));
     }
     captures = [...byCode.values()].sort((a, b) => b.lastPct - a.lastPct).slice(0, 80);
     saveCaptures(); renderCaptures(phase);
@@ -157,6 +176,8 @@
     loadBusy = true;
     try {
       const first = await fetchPage(1);
+      const currentPhase = phaseNow();
+      if (currentPhase.hhmm >= 920 && currentPhase.hhmm < 925) capture(first.rows, currentPhase);
       const pageCount = Math.min(6, Math.ceil(first.total / 100));
       const pages = [];
       for (let start = 2; start <= pageCount; start += 5) {
@@ -184,7 +205,7 @@
       let list = base.filter((x) => x._scanPct >= 3 && x._scanPct <= 10.2 && x._scanAmount >= minAmount);
       let relaxed = false;
       if (!list.length) { list = base.filter((x) => x._scanPct >= 1.5 && x._scanPct <= 10.2 && x._scanAmount >= 5e5); relaxed = true; }
-      capture(base, effective);
+      capture(base, phaseNow());
       render(list, effective);
       document.dispatchEvent(new CustomEvent("quant:market-snapshot", { detail: {
         date: marketDate, mode: effective.mode, capturedAt: Date.now(), scanned: deduped.length, total: first.total, missingPages: failed, partial: true, source: "fast",

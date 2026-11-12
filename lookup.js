@@ -140,8 +140,38 @@ function renderStockMetrics(metrics, note, quote, flow, kline) {
     + (closes.length ? `均线根据最近 ${closes.length} 个日 K 线收盘价计算。` : "");
 }
 
+function renderNotices(section, response, code) {
+  const list = section.querySelector(".stock-notice-list");
+  section.removeAttribute("aria-busy");
+  const rows = response?.data?.list;
+  if (!Array.isArray(rows)) {
+    list.textContent = "公告暂不可用，稍后重新查询。";
+    return;
+  }
+  const valid = rows.filter((row) => /^AN\d+$/.test(row?.art_code) && typeof row.title === "string" &&
+    Array.isArray(row.codes) && row.codes.some((stock) => stock?.stock_code === code));
+  if (!valid.length) {
+    list.textContent = "数据源未返回近期公告。";
+    return;
+  }
+  list.replaceChildren(...valid.slice(0, 5).map((row) => {
+    const link = document.createElement("a");
+    link.href = `https://data.eastmoney.com/notices/detail/${code}/${row.art_code}.html`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    const label = document.createElement("span"), time = document.createElement("small");
+    label.textContent = row.title;
+    const published = typeof row.display_time === "string" ? row.display_time.slice(0, 16) : "";
+    const noticeDate = typeof row.notice_date === "string" ? row.notice_date.slice(0, 10) : "";
+    time.textContent = published || noticeDate || "时间未提供";
+    link.append(label, time);
+    return link;
+  }));
+}
+
 async function load(code, market) {
   const version = ++lookupVersion;
+  window.QuantTechnical?.clear();
   detail.innerHTML = "<p class='muted'>正在读取个股数据…</p>";
   const secid = `${market}.${code}`;
   const base = "https://push2.eastmoney.com/api/qt/stock/";
@@ -150,15 +180,17 @@ async function load(code, market) {
       secid, fltt: 2, invt: 2,
       fields: "f43,f48,f57,f58,f86,f116,f129,f162,f167,f168,f170"
     });
-    const supplementary = Promise.allSettled([
-      get(`${base}fflow/kline/get`, {
-        secid, lmt: 1, klt: 101, fields1: "f1,f2,f3,f7", fields2: "f51,f52,f53,f54,f55,f56,f57,f58"
-      }),
-      get("https://push2his.eastmoney.com/api/qt/stock/kline/get", {
-        secid, klt: 101, fqt: 1, lmt: 30, fields1: "f1,f2,f3,f4,f5,f6",
-        fields2: "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
-      })
-    ]);
+    const flowRequest = get(`${base}fflow/kline/get`, {
+      secid, lmt: 1, klt: 101, fields1: "f1,f2,f3,f7", fields2: "f51,f52,f53,f54,f55,f56,f57,f58"
+    }).catch(() => null);
+    const klineRequest = get("https://push2his.eastmoney.com/api/qt/stock/kline/get", {
+      secid, klt: 101, fqt: 1, lmt: 120, end: "20500101", fields1: "f1,f2,f3,f4,f5,f6",
+      fields2: "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
+    }).catch(() => null);
+    const noticeRequest = get("https://np-anotice-stock.eastmoney.com/api/security/ann", {
+      sr: -1, page_size: 5, page_index: 1, ann_type: "A", client_source: "web",
+      stock_list: code, f_node: 0, s_node: 0
+    }).catch(() => null);
     const quote = (await quoteRequest)?.data;
     if (version !== lookupVersion) return;
     if (!quote?.f57 || !quote.f58) throw new Error("未找到股票或暂时无行情");
@@ -166,14 +198,30 @@ async function load(code, market) {
       <div class="detail-title">
         <div><h3></h3><span class="muted"></span></div><b></b>
       </div>
+      <nav class="stock-detail-nav" aria-label="个股详情导航">
+        <button type="button" data-stock-section="technical">技术面</button>
+        <button type="button" data-stock-section="concepts">所属概念</button>
+        <button type="button" data-stock-section="notices">公司公告</button>
+      </nav>
       <div class="metrics"></div>
-      <section class="stock-concepts" aria-labelledby="stockConceptsHeading">
-        <div class="stock-concepts-head">
-          <h4 id="stockConceptsHeading">所属概念板块</h4>
-          <span class="stock-concepts-count"></span>
+      <div class="stock-research-grid">
+        <section class="stock-technical" aria-label="技术面" aria-busy="true">
+          <h4>技术面</h4><p class="muted">正在读取日 K 线…</p>
+        </section>
+        <div class="stock-research-side">
+          <section class="stock-concepts" aria-labelledby="stockConceptsHeading">
+            <div class="stock-concepts-head">
+              <h4 id="stockConceptsHeading">所属概念板块</h4>
+              <span class="stock-concepts-count"></span>
+              <button type="button" class="stock-note-add">记笔记</button>
+            </div>
+            <div class="stock-concepts-list"></div>
+          </section>
+          <section class="stock-notices" aria-label="公司公告" aria-busy="true">
+            <h4>公司公告</h4><div class="stock-notice-list">正在读取近期披露…</div>
+          </section>
         </div>
-        <div class="stock-concepts-list"></div>
-      </section>
+      </div>
       <p class="flow-note"></p>`;
     const heading = detail.querySelector("h3");
     const codeLabel = document.createElement("small");
@@ -192,10 +240,34 @@ async function load(code, market) {
     const note = detail.querySelector(".flow-note");
     renderStockMetrics(metrics, note, quote);
     renderStockConcepts(detail.querySelector(".stock-concepts"), quote.f129);
+    detail.querySelector(".stock-detail-nav").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-stock-section]");
+      if (!button) return;
+      detail.querySelector(`.stock-${button.dataset.stockSection}`)?.scrollIntoView({
+        block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
+      });
+    });
+    detail.querySelector(".stock-note-add").addEventListener("click", () => {
+      document.dispatchEvent(new CustomEvent("quant:open-notes", { detail: { code, name: quote.f58 } }));
+    });
 
-    const [flow, kline] = await supplementary;
-    if (version !== lookupVersion) return;
-    renderStockMetrics(metrics, note, quote, flow.value, kline.value);
+    let flow, kline;
+    await Promise.all([
+      flowRequest.then((value) => {
+        if (version !== lookupVersion) return;
+        flow = value;
+        renderStockMetrics(metrics, note, quote, flow, kline);
+      }),
+      klineRequest.then((value) => {
+        if (version !== lookupVersion) return;
+        kline = value;
+        renderStockMetrics(metrics, note, quote, flow, kline);
+        window.QuantTechnical?.render(detail.querySelector(".stock-technical"), kline?.data?.klines);
+      }),
+      noticeRequest.then((value) => {
+        if (version === lookupVersion) renderNotices(detail.querySelector(".stock-notices"), value, code);
+      })
+    ]);
   } catch (error) {
     if (version !== lookupVersion) return;
     const status = document.createElement("p");

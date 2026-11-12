@@ -1,8 +1,9 @@
 (() => {
   const zone = "Asia/Shanghai";
   const fields = "f2,f3,f5,f6,f8,f10,f12,f14,f17,f18,f100,f117,f124";
-  const stampDate = (seconds) => seconds > 0 ? new Date(seconds * 1000).toLocaleDateString("en-CA", { timeZone: zone }) : "";
-  const currentDate = () => new Date().toLocaleDateString("en-CA", { timeZone: zone });
+  const dayFormat = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
+  const stampDate = (seconds) => Number.isFinite(seconds) && seconds > 0 ? dayFormat.format(seconds * 1000) : "";
+  const currentDate = () => dayFormat.format(Date.now());
   const shouldPoll = () => {
     const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
     const part = (type) => parts.find((x) => x.type === type)?.value || "";
@@ -15,11 +16,12 @@
     sector: x.f100 || "", floatCap: Number(x.f117) || 0, quoteAt: (Number(x.f124) || 0) * 1000 });
   const valid = (x) => /^\d{6}$/.test(x?.f12 || "") && !/^[NC]/.test(x.f14 || "") && Number(x.f2) > 0;
   const emitRows = (rows, source, total = 0) => {
-    const fresh = rows.filter((x) => valid(x) && stampDate(Number(x.f124)) === currentDate());
+    const date = currentDate();
+    const fresh = rows.filter((x) => valid(x) && stampDate(Number(x.f124)) === date);
     if (!fresh.length) return;
     const allStocks = fresh.map(normalize);
     document.dispatchEvent(new CustomEvent("quant:market-snapshot", { detail: {
-      date: currentDate(), mode: "open", capturedAt: Date.now(), source, partial: true,
+      date, mode: "open", capturedAt: Date.now(), source, partial: true,
       scanned: allStocks.length, total, stocks: allStocks.filter((x) => mainBoard(x.code) && !/ST|退/.test(x.name)), allStocks
     } }));
   };
@@ -33,28 +35,68 @@
   };
   const page = async (number) => {
     const url = new URL("https://push2.eastmoney.com/api/qt/clist/get");
-    url.search = new URLSearchParams({ pn: String(number), pz: "100", po: "1", np: "1", fltt: "2", invt: "2", fid: "f3", fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23", fields, _: String(Date.now()) });
+    url.search = new URLSearchParams({ pn: String(number), pz: "100", po: "1", np: "1", fltt: "2", invt: "2", fid: "f12", fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048", fields, _: String(Date.now()) });
     const data = (await fetchJson(url)).data;
-    if (!data || !Array.isArray(data.diff)) throw new Error("行情页为空");
+    if (!Array.isArray(data?.diff) || !data.diff.length) throw new Error("行情页为空");
     return { rows: data.diff, total: Number(data.total) || data.diff.length };
   };
   const health = (detail) => document.dispatchEvent(new CustomEvent("quant:market-health", { detail }));
-  let fullBusy = false;
+  const cache = new Promise((resolve) => {
+    if (!window.indexedDB) return resolve(null);
+    const request = indexedDB.open("quantLens.marketSnapshots", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("snapshots");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = request.onblocked = () => resolve(null);
+  }).catch(() => null);
+  let fullBusy = false, receivedFullSnapshot = false;
+
+  cache.then((db) => {
+    if (!db) return;
+    const request = db.transaction("snapshots").objectStore("snapshots").get("latest");
+    request.onsuccess = () => {
+      const snapshot = request.result;
+      if (receivedFullSnapshot || !snapshot?.allStocks?.length || Date.now() - snapshot.capturedAt > 7 * 86400000) return;
+      document.dispatchEvent(new CustomEvent("quant:market-snapshot", {
+        detail: { ...snapshot, mode: "review", source: "cache" }
+      }));
+    };
+  }).catch(() => {});
+
+  function saveSnapshot(snapshot) {
+    if (!snapshot.date || !snapshot.total || snapshot.scanned / snapshot.total < .9) return;
+    cache.then((db) => {
+      if (!db) return;
+      const store = db.transaction("snapshots", "readwrite").objectStore("snapshots");
+      const previous = store.get("latest");
+      previous.onsuccess = () => {
+        if (!previous.result || previous.result.quotedAt <= snapshot.quotedAt) store.put(snapshot, "latest");
+      };
+    }).catch(() => {});
+  }
+
   const fullScan = async () => {
     if (fullBusy) return;
     fullBusy = true;
     health({ state: "scanning", capturedAt: Date.now() });
     try {
-      const first = await page(1), count = Math.min(65, Math.ceil(first.total / 100));
+      let first;
+      try { first = await page(1); }
+      catch {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        first = await page(1);
+      }
+      const count = Math.min(65, Math.ceil(first.total / 100));
       const byPage = new Map([[1, first.rows]]), missing = [];
       emitRows(first.rows, "full-batch", first.total);
       for (let start = 2; start <= count; start += 6) {
         const numbers = Array.from({ length: Math.min(6, count - start + 1) }, (_, i) => start + i);
-        const results = await Promise.allSettled(numbers.map(page));
-        results.forEach((result, i) => {
-          if (result.status === "fulfilled") { byPage.set(numbers[i], result.value.rows); emitRows(result.value.rows, "full-batch", first.total); }
-          else missing.push(numbers[i]);
-        });
+        await Promise.allSettled(numbers.map(async (number) => {
+          try {
+            const result = await page(number);
+            byPage.set(number, result.rows);
+            emitRows(result.rows, "full-batch", first.total);
+          } catch { missing.push(number); }
+        }));
       }
       // Retry gaps once after the main pass, with lower concurrency.
       for (let start = 0; start < missing.length; start += 3) {
@@ -66,14 +108,18 @@
       }
       const raw = [...byPage.values()].flat();
       const unique = [...new Map(raw.filter(valid).map((x) => [x.f12, x])).values()];
-      const sourceDate = stampDate(Math.max(0, ...unique.map((x) => Number(x.f124) || 0)));
+      const sourceSeconds = Math.max(0, ...unique.map((x) => Number(x.f124) || 0));
+      const sourceDate = stampDate(sourceSeconds);
       const allStocks = unique.map(normalize);
       const stocks = allStocks.filter((x) => mainBoard(x.code) && !/ST|退/.test(x.name));
       const missingPages = count - byPage.size, capturedAt = Date.now();
-      document.dispatchEvent(new CustomEvent("quant:market-snapshot", { detail: {
-        date: sourceDate, mode: sourceDate === currentDate() ? "open" : "review", capturedAt,
+      const snapshot = {
+        date: sourceDate, mode: sourceDate === currentDate() ? "open" : "review", capturedAt, quotedAt: sourceSeconds * 1000,
         source: "full", partial: false, scanned: unique.length, total: first.total, missingPages, stocks, allStocks
-      } }));
+      };
+      receivedFullSnapshot ||= Boolean(first.total && unique.length / first.total >= .9);
+      saveSnapshot(snapshot);
+      document.dispatchEvent(new CustomEvent("quant:market-snapshot", { detail: snapshot }));
       health({ state: "ready", capturedAt, date: sourceDate, scanned: unique.length, total: first.total, missingPages });
     } catch (error) {
       health({ state: "error", capturedAt: Date.now(), message: String(error?.message || error) });
@@ -88,7 +134,7 @@
     watchBusy = true;
     try {
       for (let start = 0; start < codes.length; start += 50) {
-        const secids = codes.slice(start, start + 50).map((code) => `${/^[69]/.test(code) ? 1 : 0}.${code}`).join(",");
+        const secids = codes.slice(start, start + 50).map((code) => `${!code.startsWith("920") && /^[69]/.test(code) ? 1 : 0}.${code}`).join(",");
         const url = new URL("https://push2.eastmoney.com/api/qt/ulist.np/get");
         url.search = new URLSearchParams({ secids, fields, fltt: "2", _: String(Date.now()) });
         emitRows((await fetchJson(url)).data?.diff || [], "watch");
@@ -97,7 +143,7 @@
   };
   fullScan(); watchScan();
   setInterval(() => { if (shouldPoll()) fullScan(); }, 90000);
-  setInterval(() => { if (shouldPoll()) watchScan(); }, 15000);
+  setInterval(() => { if (shouldPoll()) watchScan(); }, 10000);
   document.addEventListener("quant:watchlist-changed", watchScan);
   document.addEventListener("quant:refresh-market", () => { fullScan(); watchScan(); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { fullScan(); watchScan(); } });
