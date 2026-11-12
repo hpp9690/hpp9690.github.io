@@ -117,6 +117,13 @@
     const signal = event.detail;
     if (signal?.type === "auction-early") add("auction-early", signal, "竞价提前转强", signal.reason);
   });
+  document.addEventListener("quant:sector-volume-alert", (event) => {
+    const alert = event.detail?.alert;
+    if (!alert) return;
+    const label = alert.direction === "up" ? "板块放量" : "板块缩量";
+    beep();
+    notifyDesktop({ ...alert, type: alert.direction, label, detail: `新增成交量速度为前一窗的 ${alert.ratio.toFixed(2)} 倍` });
+  });
   document.addEventListener("quant:market-health", (event) => {
     marketHealth = event.detail;
     if (marketHealth?.state === "ready") coverage = `全市场 ${marketHealth.scanned}/${marketHealth.total}${marketHealth.missingPages ? ` · 缺 ${marketHealth.missingPages} 页` : ""}`;

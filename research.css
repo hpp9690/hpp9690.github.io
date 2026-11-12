@@ -91,6 +91,50 @@
 .research-primary { background: var(--accent-button); border-color: var(--accent-button); color: white; }
 .anomaly-item { grid-template-columns: 53px minmax(90px, 1fr) auto; }
 .anomaly-detail small { display: block; margin-top: 3px; }
+.anomaly-panel [hidden] { display: none !important; }
+.anomaly-view-tabs { display: inline-grid; grid-template-columns: repeat(2, 1fr); width: auto; margin: 12px 0; }
+.anomaly-view-tabs button { padding: 5px 12px; font-size: 12px; white-space: nowrap; }
+#sectorAlertCount {
+  display: inline-block;
+  min-width: 17px;
+  margin-left: 3px;
+  border-radius: 9px;
+  background: var(--surface-accent);
+  color: var(--accent-strong);
+  font-size: 10px;
+}
+.sector-anomaly-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sector-anomaly-toolbar p { margin: 0; color: var(--muted); font-size: 12px; }
+.sector-anomaly-toolbar > div { display: flex; gap: 9px; }
+.sector-anomaly-toolbar label { font-size: 12px; color: var(--muted); }
+.sector-anomaly-toolbar select { min-height: 32px; padding: 4px 7px; font-size: 12px; }
+.sector-anomaly-feed { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr)); gap: 8px; }
+.sector-anomaly-feed .anomaly-empty { grid-column: 1 / -1; }
+.sector-alert-card {
+  display: grid;
+  gap: 5px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-subtle);
+  text-align: left;
+}
+.sector-alert-card:hover { background: var(--surface-hover); }
+.sector-alert-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sector-alert-top b { font-size: 15px; overflow-wrap: anywhere; }
+.sector-alert-top small, .sector-alert-detail { color: var(--muted); font-size: 11px; }
+.sector-alert-tag { margin-left: auto; padding: 3px 7px; border-radius: 8px; background: var(--surface-accent); color: var(--accent-strong); font-size: 11px; }
+.sector-alert-card[data-direction="down"] .sector-alert-tag { background: var(--warning-surface); color: var(--warning); }
+.sector-alert-metrics { font-size: 12px; color: var(--muted); }
+.sector-alert-metrics b { color: var(--text); font-size: 15px; font-variant-numeric: tabular-nums; }
+.sector-alert-link { color: var(--accent-strong); font-size: 12px; }
 
 @media (max-width: 760px) {
   .stock-research-grid { grid-template-columns: minmax(0, 1fr); }

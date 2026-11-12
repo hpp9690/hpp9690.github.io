@@ -4,7 +4,7 @@
   const safe = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const compact = (value) => String(value || "").toLowerCase().replace(/[\s·\-_（）()]/g, "").replace(/概念|板块/g, "");
   const money = (value) => value >= 1e8 ? `${(value / 1e8).toFixed(2)}亿` : `${(value / 1e4).toFixed(0)}万`;
-  const pct = (value) => `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
+  const pct = (value) => Number.isFinite(value) ? `${value > 0 ? "+" : ""}${value.toFixed(2)}%` : "—";
   const mainBoard = (code) => /^(000|001|002|003|600|601|603|605)/.test(code);
   const shell = document.createElement("section");
   shell.id = "concept";
@@ -21,7 +21,7 @@
   $(".concept-filters", shell).insertAdjacentHTML("beforeend", `<button type="button" id="conceptReset">重置筛选</button>`);
   $("#conceptMatches").setAttribute("aria-live", "polite");
   $("#conceptHealth").setAttribute("role", "status");
-  let boards = [], selected = null, members = [], filterLimit = 40, queryLimit = 12, catalogueAt = 0, selectionToken = 0, searchOpen = true;
+  let boards = [], selected = null, members = [], filterLimit = 40, queryLimit = 12, catalogueAt = 0, selectionToken = 0, searchOpen = true, directoryDate = "";
   let recentCodes = [];
   try { recentCodes = JSON.parse(localStorage.getItem("quantLens.conceptRecent.v1") || "[]").filter((x) => /^BK\d+$/.test(x)).slice(0, 5); } catch {}
   try { const cached = JSON.parse(localStorage.getItem(cacheKey) || "{}"); if (Date.now() - cached.at < 6 * 3600000 && Array.isArray(cached.boards)) { boards = cached.boards; catalogueAt = cached.at; } } catch {}
@@ -45,7 +45,9 @@
     $("#conceptMatches").hidden = !searchOpen;
     $("#conceptClear").hidden = !$("#conceptQuery").value;
     $("#conceptMatches").innerHTML = matches.slice(0, queryLimit).map((x) => `<button type="button" data-board="${safe(x.code)}" class="${selected?.code === x.code ? "active" : ""}"><b>${safe(x.name)}${!query && recentCodes.includes(x.code) ? `<small>最近查看</small>` : ""}</b><span class="${x.pct >= 0 ? "up" : "down"}">${pct(x.pct)}</span></button>`).join("") + (matches.length > queryLimit ? `<button type="button" data-more-boards="1">显示更多 · ${matches.length} 个板块</button>` : "") || `<div class="concept-empty">${boards.length ? "没有匹配的概念板块，试试更短的关键词" : "正在读取概念板块目录"}</div>`;
-    $("#conceptHealth").textContent = boards.length ? `已载入 ${boards.length} 个概念板块` : "概念板块目录暂不可用";
+    $("#conceptHealth").textContent = boards.length
+      ? `${boards.length} 个概念板块${directoryDate ? ` · 目录 ${directoryDate}` : ""}`
+      : "概念板块目录暂不可用";
   };
   const fetchBoards = async () => {
     $("#conceptHealth").textContent = "正在更新概念板块目录";
@@ -59,11 +61,22 @@
       if (failed.length) { const retry = await Promise.allSettled(failed.map(boardPage)); retry.forEach((r) => { if (r.status === "fulfilled") rows.push(...r.value.rows); }); }
       const next = [...new Map(rows.filter((x) => /^BK\d+$/.test(x.f12 || "")).map((x) => [x.f12, { code: x.f12, name: x.f14, pct: Number(x.f3) || 0, up: Number(x.f104) || 0, down: Number(x.f105) || 0, at: Number(x.f124) * 1000 || 0 }])).values()];
       if (!next.length) throw new Error("板块目录为空");
-      boards = next; catalogueAt = Date.now();
+      boards = next; catalogueAt = Date.now(); directoryDate = "";
       try { localStorage.setItem(cacheKey, JSON.stringify({ at: catalogueAt, boards })); } catch {}
       renderMatches();
       if (boards.length < first.total) $("#conceptHealth").textContent = `已载入 ${boards.length}/${first.total} 个板块 · 部分目录缺页`;
-    } catch { renderMatches(); $("#conceptHealth").textContent = boards.length ? `目录更新失败 · 使用缓存 ${boards.length} 个` : "板块目录读取失败，请重试"; }
+    } catch {
+      if (!boards.length) {
+        try {
+          const fallback = await window.QuantBoards.directory();
+          boards = fallback.boards.filter((board) => board.kind === "concept");
+          directoryDate = fallback.date;
+          catalogueAt = Date.now();
+        } catch {}
+      }
+      renderMatches();
+      if (!boards.length) $("#conceptHealth").textContent = "板块目录读取失败，请重试";
+    }
   };
   let catalogueRequest;
   const loadBoards = (force = false) => {
@@ -81,55 +94,98 @@
     return new Map(sorted.map((x, i) => [x.code, sorted.length <= 1 ? .5 : i / (sorted.length - 1)]));
   };
   const scoreMembers = (rows) => {
-    const gain = percentile(rows, "pct"), amount = percentile(rows, "amount"), turnover = percentile(rows, "turnover"), cap = percentile(rows, "cap");
-    return rows.map((x) => ({ ...x, score: Math.max(0, Math.round(35 * gain.get(x.code) + 30 * amount.get(x.code) + 20 * turnover.get(x.code) + 15 * cap.get(x.code) - (/ST|退/.test(x.name) ? 25 : 0))) }));
+    const quoted = rows.filter((row) => row.quoted);
+    const gain = percentile(quoted, "pct"), amount = percentile(quoted, "amount"), turnover = percentile(quoted, "turnover"), cap = percentile(quoted, "cap");
+    return rows.map((x) => ({ ...x, score: x.quoted
+      ? Math.max(0, Math.round(35 * gain.get(x.code) + 30 * amount.get(x.code) + 20 * turnover.get(x.code) + 15 * cap.get(x.code) - (/ST|退/.test(x.name) ? 25 : 0)))
+      : null }));
   };
   const renderMembers = () => {
     if (!selected) return;
     let watchCodes = new Set();
     try { watchCodes = new Set(JSON.parse(localStorage.getItem("quantLens.watchlist.v1") || "[]").map((x) => x.code)); } catch {}
     const market = $("#conceptMarket").value, minGain = Number($("#conceptGain").value), minAmount = Number($("#conceptAmount").value), sort = $("#conceptSort").value;
-    const filtered = members.filter((x) => (market === "all" || marketOf(x.code) === market) && x.pct >= minGain && x.amount >= minAmount);
-    const ordered = [...filtered].sort((a, b) => (b[sort === "leader" ? "score" : sort] - a[sort === "leader" ? "score" : sort]) || b.amount - a.amount || a.code.localeCompare(b.code));
-    const leaders = [...filtered].filter((x) => !/ST|退/.test(x.name)).sort((a, b) => b.score - a.score).slice(0, 3);
-    const gainLeader = [...filtered].sort((a, b) => b.pct - a.pct)[0], amountLeader = [...filtered].sort((a, b) => b.amount - a.amount)[0];
+    const filtered = members.filter((x) => (market === "all" || marketOf(x.code) === market) &&
+      (x.quoted ? x.pct >= minGain && x.amount >= minAmount : minGain === -100 && minAmount === 0));
+    const field = sort === "leader" ? "score" : sort;
+    const ordered = [...filtered].sort((a, b) => Number(b.quoted) - Number(a.quoted) ||
+      (b[field] - a[field]) || b.amount - a.amount || a.code.localeCompare(b.code));
+    const quoted = filtered.filter((x) => x.quoted);
+    const leaders = quoted.filter((x) => !/ST|退/.test(x.name)).sort((a, b) => b.score - a.score).slice(0, 3);
+    const gainLeader = [...quoted].sort((a, b) => b.pct - a.pct)[0], amountLeader = [...quoted].sort((a, b) => b.amount - a.amount)[0];
     $("#conceptLeaders").innerHTML = leaders.length ? leaders.map((x, i) => `<article class="concept-leader"><small>盘面龙头候选 ${i + 1}</small><b>${safe(x.name)} <em>${safe(x.code)}</em></b><span>强度 ${x.score} · 涨幅 <i class="${x.pct >= 0 ? "up" : "down"}">${pct(x.pct)}</i> · 成交 ${money(x.amount)}</span></article>`).join("") + `<div class="concept-roles"><span>涨幅领先：<b>${safe(gainLeader.name)}</b> ${pct(gainLeader.pct)}</span><span>成交核心：<b>${safe(amountLeader.name)}</b> ${money(amountLeader.amount)}</span></div>` : `<div class="concept-empty">当前筛选条件下暂无龙头候选</div>`;
     $("#conceptCount").textContent = `成分股 ${members.length} 只 · 当前筛选 ${filtered.length} 只 · 显示 ${Math.min(filterLimit, filtered.length)} 只`;
-    $("#conceptStocks").innerHTML = ordered.slice(0, filterLimit).map((x, i) => `<article class="concept-stock"><span class="concept-rank">${i + 1}</span><div class="concept-stock-name"><b>${safe(x.name)}</b><small>${safe(x.code)}</small></div><span class="${x.pct >= 0 ? "up" : "down"}">${pct(x.pct)}</span><span>成交 ${money(x.amount)}</span><span>换手 ${x.turnover.toFixed(2)}%</span><strong>${x.score} 分</strong><button type="button" data-stock-open="${safe(x.code)}">详情</button><button type="button" data-stock-watch="${safe(x.code)}">${watchCodes.has(x.code) ? "★ 已关注" : "☆ 关注"}</button></article>`).join("") || `<div class="concept-empty">当前条件下暂无成分股</div>`;
+    $("#conceptStocks").innerHTML = ordered.slice(0, filterLimit).map((x, i) => `<article class="concept-stock"><span class="concept-rank">${i + 1}</span><div class="concept-stock-name"><b>${safe(x.name)}</b><small>${safe(x.code)}</small></div><span class="${x.quoted ? (x.pct >= 0 ? "up" : "down") : "muted"}">${pct(x.pct)}</span><span>成交 ${x.quoted ? money(x.amount) : "—"}</span><span>换手 ${x.quoted ? x.turnover.toFixed(2) + "%" : "—"}</span><strong>${x.quoted ? x.score + " 分" : "待报价"}</strong><button type="button" data-stock-open="${safe(x.code)}">详情</button><button type="button" data-stock-watch="${safe(x.code)}">${watchCodes.has(x.code) ? "★ 已关注" : "☆ 关注"}</button></article>`).join("") || `<div class="concept-empty">当前条件下暂无成分股</div>`;
     $("#conceptMore").hidden = ordered.length <= filterLimit;
   };
-  const selectBoard = async (code) => {
-    const board = boards.find((x) => x.code === code); if (!board) return;
+  const loadMembers = async (code, onRoster) => {
+    try { return await window.QuantBoards.members(code, onRoster); }
+    catch {
+      const first = await memberPage(code, 1), pages = Math.ceil(first.total / 100), rows = [...first.rows], failed = [];
+      for (let start = 2; start <= pages; start += 4) {
+        const nums = Array.from({ length: Math.min(4, pages - start + 1) }, (_, i) => start + i);
+        const results = await Promise.allSettled(nums.map((number) => memberPage(code, number)));
+        results.forEach((result, i) => {
+          if (result.status === "fulfilled") rows.push(...result.value.rows);
+          else failed.push(nums[i]);
+        });
+      }
+      if (failed.length) {
+        const retries = await Promise.allSettled(failed.map((page) => memberPage(code, page)));
+        retries.forEach((result) => { if (result.status === "fulfilled") rows.push(...result.value.rows); });
+      }
+      const unique = new Map();
+      for (const x of rows) {
+        if (!/^\d{6}$/.test(x.f12 || "")) continue;
+        const quoted = Number(x.f2) > 0 && Number.isFinite(Number(x.f3));
+        unique.set(x.f12, quoted ? { code: x.f12, name: x.f14, quoted, pct: Number(x.f3),
+          amount: Number(x.f6) || 0, turnover: Number(x.f8) || 0, cap: Number(x.f21) || 0, at: Number(x.f124) * 1000 || 0 }
+          : { code: x.f12, name: x.f14, quoted });
+      }
+      return { rows: [...unique.values()], total: first.total };
+    }
+  };
+  const selectBoard = async (code, suppliedBoard) => {
+    const board = suppliedBoard || boards.find((x) => x.code === code); if (!board) return;
     const token = ++selectionToken;
     selected = board; members = []; filterLimit = 40; searchOpen = false;
-    recentCodes = [code, ...recentCodes.filter((x) => x !== code)].slice(0, 5);
-    try { localStorage.setItem("quantLens.conceptRecent.v1", JSON.stringify(recentCodes)); } catch {}
+    if (board.kind !== "industry") {
+      recentCodes = [code, ...recentCodes.filter((x) => x !== code)].slice(0, 5);
+      try { localStorage.setItem("quantLens.conceptRecent.v1", JSON.stringify(recentCodes)); } catch {}
+    }
+    $(".concept-head h2", shell).textContent = board.kind === "industry" ? "行业板块成分股" : "概念板块选股器";
     $("#conceptQuery").value = board.name;
     $(".concept-presets").hidden = true;
     $("#conceptMatches").hidden = true;
     $("#conceptResult").hidden = false; $("#conceptBoardName").textContent = board.name;
     $("#conceptBoardMove").textContent = pct(board.pct);
-    $("#conceptBoardMove").className = board.pct >= 0 ? "up" : "down";
+    $("#conceptBoardMove").className = Number.isFinite(board.pct) ? (board.pct >= 0 ? "up" : "down") : "muted";
     $("#conceptBoardMeta").textContent = "正在读取板块成分股…";
     $("#conceptLeaders").innerHTML = `<div class="concept-loading">正在计算板块盘面强度…</div>`;
     $("#conceptStocks").innerHTML = `<div class="concept-loading">正在读取成分股…</div>`;
     $("#conceptResult").setAttribute("aria-busy", "true");
     renderMatches();
-    try {
-      const first = await memberPage(code, 1), pages = Math.ceil(first.total / 100), rows = [...first.rows], failed = [];
-      for (let start = 2; start <= pages; start += 4) {
-        const nums = Array.from({ length: Math.min(4, pages - start + 1) }, (_, i) => start + i);
-        const results = await Promise.allSettled(nums.map((n) => memberPage(code, n)));
-        results.forEach((r, i) => { if (r.status === "fulfilled") rows.push(...r.value.rows); else failed.push(nums[i]); });
-      }
-      if (failed.length) { const retry = await Promise.allSettled(failed.map((n) => memberPage(code, n))); retry.forEach((r) => { if (r.status === "fulfilled") rows.push(...r.value.rows); }); }
+    if (!Number.isFinite(board.pct)) {
+      window.QuantBoards.quotes([`90.${code}`], "f12,f3").then((rows) => {
+        const value = Number(rows.find((row) => row.f12 === code)?.f3);
+        if (token !== selectionToken || !Number.isFinite(value)) return;
+        $("#conceptBoardMove").textContent = pct(value);
+        $("#conceptBoardMove").className = value >= 0 ? "up" : "down";
+      }).catch(() => {});
+    }
+    const showMembers = (result, loadingQuotes = false) => {
       if (token !== selectionToken) return;
-      const unique = [...new Map(rows.filter((x) => /^\d{6}$/.test(x.f12 || "")).map((x) => [x.f12, { code: x.f12, name: x.f14, pct: Number(x.f3) || 0, amount: Number(x.f6) || 0, turnover: Number(x.f8) || 0, cap: Number(x.f21) || 0, at: Number(x.f124) * 1000 || 0 }])).values()];
-      members = scoreMembers(unique);
-      const latest = Math.max(0, ...unique.map((x) => x.at));
-      const stamp = latest ? new Date(latest).toLocaleString("zh-CN", { timeZone: zone }) : "时间未知";
-      $("#conceptBoardMeta").textContent = `${stamp} 行情 · ${unique.length}/${first.total} 只成分股${unique.length < first.total ? " · 部分缺页" : ""} · 板块上涨 ${board.up} / 下跌 ${board.down}`;
+      members = scoreMembers(result.rows);
+      const latest = Math.max(0, ...members.map((x) => x.at || 0));
+      const stamp = latest ? `报价 ${new Date(latest).toLocaleString("zh-CN", { timeZone: zone })}` : "报价时间未知";
+      const quoted = members.filter((x) => x.quoted).length;
+      const quoteStatus = loadingQuotes ? "正在读取个股报价" : `已取报价 ${quoted} 只 · ${stamp}`;
+      $("#conceptBoardMeta").textContent = `${members.length}/${result.total} 只成分股 · ${quoteStatus}${members.length < result.total ? " · 部分缺页" : ""}`;
       renderMembers();
+    };
+    try {
+      const result = await loadMembers(code, (roster) => showMembers(roster, true));
+      showMembers(result);
     } catch { if (token === selectionToken) { $("#conceptBoardMeta").textContent = "成分股读取失败，请重新选择板块"; $("#conceptStocks").innerHTML = `<div class="concept-empty">行情接口暂不可用</div>`; } }
     finally { if (token === selectionToken) $("#conceptResult").removeAttribute("aria-busy"); }
   };
@@ -138,8 +194,16 @@
     if (clear) $("#conceptQuery").value = "";
     $(".concept-presets").hidden = false;
     $("#conceptResult").hidden = true;
+    $(".concept-head h2", shell).textContent = "概念板块选股器";
     renderMatches();
   };
+  document.addEventListener("quant:open-board", (event) => {
+    const board = event.detail;
+    if (!/^BK\d+$/.test(board?.code || "") || typeof board.name !== "string") return;
+    $("#conceptReset").click();
+    document.dispatchEvent(new CustomEvent("quant:open-view", { detail: { id: "concept" } }));
+    selectBoard(board.code, board);
+  });
   document.addEventListener("quant:open-concept", async (event) => {
     const name = event.detail?.name?.trim();
     if (!name) return;
