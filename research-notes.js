@@ -34,33 +34,57 @@
   shell.className = "card research-panel";
   shell.hidden = document.body.dataset.view !== "notes";
   shell.innerHTML = `
-    <div class="research-head"><div><h2>研究笔记</h2><p>保存抖音分享链接、博主的操作思路和自己的核对结果。</p></div><button type="button" id="newResearchNote">新建笔记</button></div>
+    <div class="research-head">
+      <h2>研究笔记</h2>
+      <button type="button" id="newResearchNote" aria-controls="researchNoteForm" aria-expanded="false">新建笔记</button>
+    </div>
     <form id="researchNoteForm" hidden>
       <div class="research-note-fields">
-        <label>标题 <input name="title" required maxlength="70" placeholder="例如：竞价参考金额增加"></label>
-        <label>股票代码（可选） <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="六位股票代码"></label>
-        <label>抖音链接（可选） <input name="url" maxlength="500" placeholder="可粘贴视频链接或分享口令"></label>
-        <label>核对状态 <select name="state">${Object.entries(states).map(([id, label]) => `<option value="${id}">${label}</option>`).join("")}</select></label>
-        <label class="research-wide">方法或操作记录 <textarea name="method" required maxlength="1200" rows="3" placeholder="写下原作者描述的条件、时间和过程"></textarea></label>
-        <label class="research-wide">核对与复盘 <textarea name="evidence" maxlength="1200" rows="3" placeholder="记下可核实的行情、公告或样本结果"></textarea></label>
+        <label class="research-wide">标题 <input name="title" required maxlength="70"></label>
+        <label class="research-wide">笔记 <textarea name="method" required maxlength="1200" rows="3"></textarea></label>
       </div>
-      <div class="research-row"><button type="submit" class="research-primary">保存笔记</button><button type="button" id="cancelResearchNote">取消</button></div>
+      <details class="note-options">
+        <summary>来源与复盘（可选）</summary>
+        <div class="research-note-fields">
+          <label>股票代码 <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="六位股票代码"></label>
+          <label>抖音链接 <input name="url" maxlength="500" placeholder="链接或分享文字"></label>
+          <label>核对状态 <select name="state">${Object.entries(states).map(([id, label]) => `<option value="${id}">${label}</option>`).join("")}</select></label>
+          <label class="research-wide">复盘记录 <textarea name="evidence" maxlength="1200" rows="3"></textarea></label>
+        </div>
+      </details>
+      <div class="research-row research-note-actions">
+        <button type="submit" class="research-primary">保存</button>
+        <button type="button" id="cancelResearchNote">取消</button>
+      </div>
     </form>
-    <div class="research-row research-note-search"><label>查找笔记 <input id="findResearchNote" type="search" placeholder="标题、股票代码或关键词"></label><span id="researchNoteCount" class="research-badge"></span></div>
+    <div id="researchNoteSearch" hidden>
+      <div class="research-row research-note-search">
+        <input id="findResearchNote" type="search" aria-label="查找笔记" placeholder="查找笔记">
+        <span id="researchNoteCount" class="research-badge"></span>
+      </div>
+    </div>
     <p class="research-status" role="status"></p><button type="button" id="restoreResearchNote" hidden>撤销删除</button>
     <div id="researchNotesList" class="research-notes-list"></div>
-    <h3 class="research-sources-heading">抖音分享摘记</h3>
-    <p class="research-foot">摘记依据公开简介，核对状态为待验证。笔记仅保存于当前浏览器。</p>
-    <div class="research-notes-list">
-      ${sources.map((source, index) => `<article class="research-note">
-        <div class="research-row"><h4>${safe(source.title)}</h4><span class="research-badge">待验证</span></div>
-        <p>${safe(source.method)}</p><p class="research-evidence">${safe(source.evidence)}</p>
-        <div class="research-row research-note-actions"><a href="${source.url}" target="_blank" rel="noopener noreferrer">打开抖音原帖 ↗</a><button type="button" data-note-example="${index}">记为笔记</button></div>
-      </article>`).join("")}
-    </div>`;
+    <details class="notes-disclosure">
+      <summary>抖音参考</summary>
+      <p class="research-foot">根据公开简介整理，待验证。</p>
+      <div class="research-notes-list note-source-list">
+        ${sources.map((source, index) => `<article class="research-note">
+          <h4>${safe(source.title)}</h4>
+          <p>${safe(source.method)}</p>
+          <p class="research-evidence">${safe(source.evidence)}</p>
+          <div class="research-row research-note-actions">
+            <a href="${source.url}" target="_blank" rel="noopener noreferrer">原帖 ↗</a>
+            <button type="button" data-note-example="${index}">记为笔记</button>
+          </div>
+        </article>`).join("")}
+      </div>
+    </details>
+    <p class="research-foot">笔记保存在当前浏览器。</p>`;
   document.querySelector(".decision-desk").after(shell);
   const $ = (selector) => shell.querySelector(selector);
   const form = $("#researchNoteForm"), fields = form.elements;
+  const newButton = $("#newResearchNote"), options = $(".note-options"), search = $("#findResearchNote");
   let entries = [], editingId = null, removed = null;
   try {
     const saved = JSON.parse(localStorage.getItem(key) || "[]");
@@ -78,37 +102,59 @@
     editingId = note.id ?? null;
     form.reset();
     for (const field of ["title", "code", "url", "method", "evidence"]) fields[field].value = note[field] || "";
-    fields.state.value = states[note.state] ? note.state : "pending";
+    fields.state.value = Object.hasOwn(states, note.state) ? note.state : "pending";
+    options.open = Boolean(note.code || note.url || note.evidence || fields.state.value !== "pending");
+    status("");
     form.hidden = false;
+    newButton.setAttribute("aria-expanded", "true");
     fields.title.focus();
   }
 
+  function closeEditor() {
+    form.hidden = true;
+    newButton.setAttribute("aria-expanded", "false");
+    newButton.focus();
+  }
+
   function render() {
-    const query = $("#findResearchNote").value.trim().toLowerCase();
+    if (!entries.length) search.value = "";
+    $("#researchNoteSearch").hidden = !entries.length;
+    const query = search.value.trim().toLowerCase();
     const shown = entries.filter((note) => [note.title, note.code, note.method, note.evidence].some((value) => String(value ?? "").toLowerCase().includes(query)));
     $("#researchNoteCount").textContent = `${shown.length} 条`;
     $("#researchNotesList").innerHTML = shown.map((note) => {
       const url = sourceUrl(note.url);
-      return `<article class="research-note">
-        <div class="research-row"><h4>${safe(note.title)} ${note.code ? `<small>${safe(note.code)}</small>` : ""}</h4><span class="research-badge">${states[note.state] || states.pending}</span></div>
+      const stockCode = /^\d{6}$/.test(note.code || "") ? note.code : "";
+      const state = Object.hasOwn(states, note.state) ? states[note.state] : states.pending;
+      return `<details class="research-note">
+        <summary class="note-summary">
+          <span class="note-summary-title">${safe(note.title)}</span>
+          ${stockCode ? ` <small>${stockCode}</small>` : ""}
+          <span class="research-badge">${state}</span>
+        </summary>
         <p>${safe(note.method)}</p>
         ${note.evidence ? `<p class="research-evidence">${safe(note.evidence)}</p>` : ""}
         <div class="research-row research-note-actions">
-          ${url ? `<a href="${safe(url)}" target="_blank" rel="noopener noreferrer">打开抖音原帖 ↗</a>` : ""}
+          ${url ? `<a href="${safe(url)}" target="_blank" rel="noopener noreferrer">原帖 ↗</a>` : ""}
+          ${stockCode ? `<button type="button" data-note-code="${stockCode}">查看个股</button>` : ""}
           <button type="button" data-edit-note="${safe(note.id)}">编辑</button>
           <button type="button" data-delete-note="${safe(note.id)}">删除</button>
         </div>
-      </article>`;
-    }).join("") || `<div class="research-empty">${query ? "没有匹配的笔记。" : "还没有笔记。可新建一条，或从下面的分享摘记开始。"}<\/div>`;
+      </details>`;
+    }).join("") || `<div class="research-empty">${query ? "没有匹配的笔记" : "还没有笔记"}</div>`;
     $("#restoreResearchNote").hidden = !removed;
   }
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const url = sourceUrl(fields.url.value);
-    if (fields.url.value.trim() && !url) return status("请输入有效的抖音视频链接或分享文本。");
+    if (fields.url.value.trim() && !url) {
+      options.open = true;
+      fields.url.focus();
+      return status("请输入有效的抖音链接或分享文字。");
+    }
     const title = fields.title.value.trim(), method = fields.method.value.trim();
-    if (!title || !method) return status("请填写标题和方法记录。");
+    if (!title || !method) return status("请填写标题和笔记。");
     if (!editingId && entries.length >= 160) return status("笔记已达 160 条，可编辑或删除旧笔记后再添加。");
     const note = {
       id: editingId || crypto.randomUUID(), title, method, url, code: fields.code.value.trim(),
@@ -116,15 +162,20 @@
     };
     entries = [note, ...entries.filter((item) => item.id !== note.id)];
     const saved = persist();
-    form.hidden = true;
+    closeEditor();
     render();
     status(saved ? "笔记已保存。" : "浏览器未能保存，笔记暂保留在页面中。");
-    $("#newResearchNote").focus();
   });
 
-  $("#newResearchNote").addEventListener("click", () => edit());
-  $("#cancelResearchNote").addEventListener("click", () => { form.hidden = true; $("#newResearchNote").focus(); });
-  $("#findResearchNote").addEventListener("input", render);
+  form.addEventListener("invalid", (event) => {
+    if (options.contains(event.target)) options.open = true;
+  }, true);
+  newButton.addEventListener("click", () => {
+    if (form.hidden) edit();
+    else fields.title.focus();
+  });
+  $("#cancelResearchNote").addEventListener("click", closeEditor);
+  search.addEventListener("input", render);
   $("#restoreResearchNote").addEventListener("click", () => {
     if (!removed) return;
     entries.unshift(removed);
@@ -133,6 +184,13 @@
     render();
   });
   shell.addEventListener("click", (event) => {
+    const stock = event.target.closest("[data-note-code]");
+    if (stock) {
+      document.dispatchEvent(new CustomEvent("quant:open-view", { detail: { id: "lookup" } }));
+      document.getElementById("stockSearch").value = stock.dataset.noteCode;
+      document.getElementById("lookupForm").requestSubmit();
+      return;
+    }
     const example = event.target.closest("[data-note-example]");
     if (example) return edit(sources[Number(example.dataset.noteExample)]);
     const editor = event.target.closest("[data-edit-note]");

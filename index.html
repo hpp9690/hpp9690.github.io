@@ -6,23 +6,18 @@
   <meta name="description" content="A股透明量化观察器：趋势、活跃度与风险评分">
   <title>量化观察器 · A股候选扫描</title><link rel="stylesheet" href="quant.css?v=stock-concepts1">
   <link rel="stylesheet" href="research.css?v=boards1">
+  <link rel="stylesheet" href="workspace.css?v=1">
 </head>
 <body>
   <main class="wrap">
     <header>
-      <div>
-        <p class="eyebrow">A 股市场</p>
-        <h1>量化观察器</h1>
-        <p class="sub">盘中异动、板块强弱与个股观察</p>
-      </div>
+      <h1>量化观察器</h1>
       <div class="header-actions">
-        <button type="button" id="focusMode" aria-pressed="false">精简模式</button>
         <button type="button" id="refreshAll">刷新行情</button>
       </div>
     </header>
     <section class="card lookup top-lookup"><div class="lookup-row"><div><h2>个股查询</h2><p class="muted">行情、估值、资金流向和技术指标</p></div><form id="lookupForm" role="search" aria-label="个股查询"><input id="stockSearch" type="search" autocomplete="off" enterkeyhint="search" aria-label="股票名称或代码" aria-controls="suggestions" placeholder="股票名称或代码"><button type="submit">查询</button></form></div><div id="suggestions" class="suggestions" hidden></div><div id="stockDetail" class="detail-empty">输入股票名称或代码开始查询</div></section>
     <section class="card auction"><div class="cardhead"><div><p class="eyebrow">PRE-OPEN AUCTION SCAN</p><h2>盘前竞价候选</h2><p class="muted">沪深主板 · 竞价涨幅、成交额、换手与距涨停价空间综合排序。</p></div><div class="limit-actions"><span id="auctionUpdated">等待竞价时段</span><button id="auctionRefresh">刷新扫描</button></div></div><div class="auction-phase" id="auctionPhase">集合竞价 09:15–09:25；竞价结束后保留候选并切换为开盘结果复盘。</div><div class="tablewrap"><table><thead><tr><th>股票</th><th>观察分</th><th id="auctionPctLabel">竞价涨幅</th><th id="auctionAmountLabel">竞价成交额</th><th id="auctionTurnoverLabel">竞价换手</th><th>距涨停</th><th>观察信号</th></tr></thead><tbody id="auctionRows"><tr><td colspan="7" class="zt-empty">交易日 09:15 起更新</td></tr></tbody></table></div><div id="auctionMobile" class="mobile-list"></div><div class="review-head"><div><b>竞价复盘</b><small id="reviewStatus">候选快照只保存在当前浏览器</small></div><button id="reviewRefresh">更新盘中表现</button></div><div class="tablewrap"><table class="review-table"><thead><tr><th>日期</th><th>股票</th><th>竞价涨幅 / 分数</th><th>开盘涨幅</th><th>相对开盘表现</th><th>最近盘中快照</th></tr></thead><tbody id="reviewRows"><tr><td colspan="6" class="zt-empty">上线后等待交易日 09:24–09:25 自动保存竞价候选</td></tr></tbody></table></div><div id="reviewMobile" class="review-mobile"></div><div class="review-note">竞价结束前自动保存当日排名前 20 的候选；09:25 后候选不会消失，开盘后改用开盘涨幅和盘中成交数据持续更新。数据按浏览器本地保存。</div><div class="flow-note">信号按竞价涨幅、成交活跃度和距涨停价计算，不是涨停预测。09:15–09:20 的挂单可撤，竞价金额和涨幅可能快速变化；仅用竞价前实时数据不能可靠判断能否涨停。</div></section>
-    <section class="notice"><b>观察信号，不是买入建议</b><span>行情来自腾讯公开报价，可能延迟；首版覆盖沪深主板代表股，评分是盘中快照规则，不等同完整历史回测。</span></section>
     <section class="toolbar"><div class="tabs"><button class="active" data-preset="balanced">均衡趋势</button><button data-preset="momentum">强势活跃</button><button data-preset="defensive">稳健流动</button></div><label>行业筛选 <select id="sector"><option value="all">全部行业</option></select></label><label>最低成交额 <select id="amount"><option value="0">不限</option><option value="100000000">1亿元</option><option value="500000000">5亿元</option></select></label></section>
     <section class="stats" id="stats"></section>
     <section class="card limitup"><div class="cardhead"><div><p class="eyebrow">LIMIT-UP RADAR</p><h2>涨停板雷达</h2><p class="muted">切换已封板与盘中炸板，比较连板、封板时间和封单强弱。</p></div><div class="limit-actions"><span id="ztUpdated">等待加载</span><button id="ztRefresh">刷新涨停池</button></div></div><div class="zt-controls"><div class="tabs"><button class="active" data-pool="zt">今日涨停</button><button data-pool="zb">今日炸板</button></div><div class="tabs" id="ztFilters"><button class="active" data-zt="all">全部</button><button data-zt="first">首板</button><button data-zt="multi">连板</button></div><select id="ztSort"><option value="board">按连板数</option><option value="fund">按封单资金</option><option value="time">按触板时间</option><option value="prob">按次日估计概率</option></select></div><div id="ztStatus" class="zt-status">正在读取当日涨停池…</div><div class="prob-summary"><div class="prob-summary-top"><div><p class="eyebrow">NEXT-DAY CONTINUATION</p><h3>次日连板概率分析</h3></div><span id="probModelStatus">正在读取近期历史样本…</span></div><div id="probSummaryStats" class="prob-summary-stats">加载主板涨停历史样本中</div><p>概率表示：当前涨停股在下一交易日再次进入涨停池的相似案例频率估计，不代表收益概率。逐只结果可展开查看封板、连板、资金、换手、行业和市场情绪维度。</p></div><div class="tablewrap"><table><thead><tr><th>股票</th><th id="ztBoardHeading">连板</th><th>次日连板估计</th><th>涨幅</th><th>触板时间</th><th>封单资金</th><th>炸板</th><th>行业</th><th>成交额</th><th>原因线索</th></tr></thead><tbody id="ztRows"></tbody></table></div><div id="ztMobile" class="mobile-list"></div><div class="flow-note">涨停池数据来自东方财富公开行情接口；接口不提供公司级涨停原因，原因线索显示行业/连板标签并链接到资讯检索。封单与连板不代表封板稳固或次日表现。</div></section>
@@ -36,14 +31,15 @@
   <script src="technical.js?v=1"></script>
   <script src="lookup.js?v=research1"></script>
   <script src="continuation.js"></script>
-  <script src="ui.js?v=research1"></script>
+  <script src="ui.js?v=workspace1"></script>
   <script src="signal-review.js?v=1"></script>
-  <script src="research-notes.js?v=1"></script>
+  <script src="research-notes.js?v=workspace1"></script>
   <script src="board-data.js?v=1"></script>
   <script src="anomaly.js?v=boards1"></script>
-  <script src="board-anomaly.js?v=1"></script>
+  <script src="board-anomaly.js?v=workspace1"></script>
   <script src="heatmap.js?v=research1"></script>
-  <script src="opportunities.js?v=research1"></script>
+  <script src="opportunity-evidence.js?v=1"></script>
+  <script src="opportunities.js?v=workspace1"></script>
   <script src="concepts.js?v=boards1"></script>
   <script src="market-scanner.js?v=research1"></script>
   <script src="auction.js?v=research1"></script>

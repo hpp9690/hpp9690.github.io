@@ -3,33 +3,65 @@
   const cards = [...document.querySelectorAll(".card")];
   const findCard = (title) => cards.find((card) => card.querySelector("h2")?.textContent.includes(title));
   const sections = [
-    { id: "opportunity", label: "潜在机会", el: null },
-    { id: "concept", label: "概念选股", el: null },
-    { id: "anomaly", label: "异动捕捉", el: null },
-    { id: "review", label: "信号复盘", el: null },
+    { id: "opportunity", label: "机会", primary: true, el: null },
+    { id: "anomaly", label: "异动", primary: true, el: null },
+    { id: "concept", label: "板块", primary: true, el: null },
+    { id: "auction", label: "竞价", primary: true, el: $(".auction") },
+    { id: "lookup", label: "查个股", primary: true, el: $(".top-lookup") },
     { id: "heatmap", label: "市场热力图", el: null },
-    { id: "lookup", label: "个股查询", el: $(".top-lookup") },
-    { id: "auction", label: "竞价候选", el: $(".auction") },
     { id: "limitup", label: "涨停雷达", el: $(".limitup") },
+    { id: "review", label: "信号复盘", el: null },
     { id: "watchlist", label: "候选扫描", el: findCard("候选扫描") },
     { id: "notes", label: "研究笔记", el: null },
     { id: "guide", label: "评分逻辑", el: $(".guide") }
   ];
 
   sections.forEach(({ id, el }) => { if (el) { el.id = id; el.dataset.module = id; } });
-  for (const selector of [".notice", ".toolbar", ".stats"]) {
+  for (const selector of [".toolbar", ".stats"]) {
     const el = $(selector);
     if (el) el.dataset.module = "watchlist";
   }
+  const foldDetails = (panel, title, elements) => {
+    const content = elements.filter(Boolean);
+    if (!content.length) return;
+    const disclosure = document.createElement("details");
+    disclosure.className = "workspace-detail";
+    const summary = document.createElement("summary");
+    summary.textContent = title;
+    disclosure.append(summary, ...content);
+    panel.append(disclosure);
+  };
+  const auction = $(".auction"), limitup = $(".limitup");
+  foldDetails(auction, "竞价复盘与说明", [
+    $(".review-head", auction), $(".review-table", auction)?.closest(".tablewrap"),
+    $("#reviewMobile", auction), $(".review-note", auction), $(".flow-note", auction)
+  ]);
+  foldDetails(limitup, "连板估计与说明", [$(".prob-summary", limitup), $(".flow-note", limitup)]);
 
   const nav = document.createElement("nav");
   nav.className = "quick-nav";
   nav.setAttribute("aria-label", "功能快捷导航");
-  nav.innerHTML = `<div class="quick-nav-inner"><div class="quick-links">${sections.map(({ id, label }) => `<button type="button" data-target="${id}" aria-controls="${id}">${label}</button>`).join("")}</div><button type="button" id="workspaceFullscreen" hidden>全屏</button></div>`;
+  const navButton = ({ id, label }) => `<button type="button" data-target="${id}" aria-controls="${id}">${label}</button>`;
+  nav.innerHTML = `<div class="quick-nav-inner">
+    <div class="quick-links">${sections.filter((item) => item.primary).map(navButton).join("")}</div>
+    <div class="workspace-more">
+      <button type="button" id="workspaceMore" aria-expanded="false" aria-controls="workspaceMoreItems">更多 <span aria-hidden="true">⌄</span></button>
+      <div id="workspaceMoreItems" class="workspace-more-items" hidden>${sections.filter((item) => !item.primary).map(navButton).join("")}</div>
+    </div>
+    <button type="button" id="workspaceFullscreen" hidden>全屏</button>
+  </div>`;
   document.querySelector("header")?.after(nav);
 
   const validViews = new Set(sections.map((item) => item.id));
-  const links = $(".quick-links", nav);
+  const more = $("#workspaceMore", nav), moreItems = $("#workspaceMoreItems", nav);
+  const setMoreOpen = (open) => {
+    moreItems.hidden = !open;
+    more.setAttribute("aria-expanded", String(open));
+  };
+  more.addEventListener("click", () => setMoreOpen(moreItems.hidden));
+  document.addEventListener("click", (event) => {
+    if (!moreItems.hidden && !event.target.closest(".workspace-more")) setMoreOpen(false);
+  });
   const scrollBehavior = () => matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
   const activateView = (id, { remember = true, scroll = true } = {}) => {
     if (!validViews.has(id)) id = "opportunity";
@@ -43,13 +75,10 @@
       if (active) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     });
-    const selected = document.getElementById(id);
-    if (selected?.classList.contains("is-collapsed")) selected.querySelector(".section-toggle")?.click();
-    const currentButton = $('button[aria-current="page"]', links);
-    const visible = links.getBoundingClientRect();
-    const bounds = currentButton?.getBoundingClientRect();
-    if (bounds && bounds.left < visible.left) links.scrollLeft += bounds.left - visible.left - 3;
-    if (bounds && bounds.right > visible.right) links.scrollLeft += bounds.right - visible.right + 3;
+    const current = sections.find((item) => item.id === id);
+    more.classList.toggle("active", !current.primary);
+    more.setAttribute("aria-label", current.primary ? "更多功能" : `更多功能，当前为${current.label}`);
+    setMoreOpen(false);
     if (remember && location.hash !== `#${id}`) history.pushState(null, "", `#${id}`);
     document.dispatchEvent(new CustomEvent("quant:view-changed", { detail: { id } }));
     if (scroll) nav.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
@@ -58,10 +87,19 @@
 
   const desk = document.createElement("section");
   desk.className = "decision-desk";
-  desk.setAttribute("aria-label", "今日决策工作台");
-  desk.innerHTML = `<div class="desk-phase"><p class="eyebrow">TODAY'S TRADING DESK</p><div class="phase-line"><i id="phaseDot"></i><div><b id="phaseName">判断交易阶段</b><small id="phaseHint">根据当前时间给出操作顺序</small></div></div></div><div class="desk-center"><div class="desk-metrics"><span id="visibleSummary">候选载入中</span><span id="dataHealth">检查数据源</span></div><div class="workflow-actions" aria-label="快捷场景"><button type="button" data-workflow="auction">竞价强势</button><button type="button" data-workflow="first">首板机会</button><button type="button" data-workflow="multi">连板接力</button><button type="button" data-workflow="broken">炸板风险</button><button type="button" data-workflow="liquid">高流动性</button></div></div><div class="desk-watch"><button type="button" id="watchToggle" aria-expanded="false">★ 关注清单 <span id="watchCount">0</span></button><div class="watch-panel" id="watchPanel" hidden><div class="watch-panel-head"><b>重点观察</b><div><button type="button" id="copyWatch">复制代码</button><button type="button" id="clearWatch">清空</button></div></div><div id="watchItems"></div><p>星标仅保存在当前浏览器，不会自动交易。</p></div></div>`;
+  desk.setAttribute("aria-label", "行情状态和关注");
+  desk.innerHTML = `<div class="desk-status">
+    <div class="phase-line"><i id="phaseDot" aria-hidden="true"></i><b id="phaseName">交易时段</b></div>
+    <span id="dataHealth">正在读取行情</span>
+  </div>
+  <div class="desk-watch">
+    <button type="button" id="watchToggle" aria-expanded="false">☆ 关注 <span id="watchCount">0</span></button>
+    <div class="watch-panel" id="watchPanel" hidden>
+      <div class="watch-panel-head"><b>关注清单</b><div><button type="button" id="copyWatch">复制代码</button><button type="button" id="clearWatch">清空</button></div></div>
+      <div id="watchItems"></div>
+    </div>
+  </div>`;
   nav.after(desk);
-  $(".desk-phase > .eyebrow", desk).textContent = "交易时段";
 
   const toast = document.createElement("div");
   toast.className = "ui-toast";
@@ -98,22 +136,25 @@
     document.addEventListener("fullscreenchange", updateFullscreenButton);
   }
 
+  const tradingClock = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  });
   const phaseMap = () => {
-    const now = new Date(), day = now.getDay(), minute = now.getHours() * 60 + now.getMinutes();
-    if (day === 0 || day === 6) return ["休市复盘", "整理关注清单，复核信号与风险", "closed"];
-    if (minute < 9 * 60 + 15) return ["盘前准备", "先看竞价候选与昨日复盘，不把昨日行情当今日信号", "prepare"];
-    if (minute < 9 * 60 + 25) return ["集合竞价", "重点看涨幅、成交额与撤单变化，09:20 前挂单可撤", "live"];
-    if (minute < 9 * 60 + 30) return ["竞价确认", "保留候选，等待开盘承接，不抢最后一分钟信号", "confirm"];
-    if (minute < 11 * 60 + 30) return ["盘中跟踪", "比较开盘承接、封板强度和炸板次数", "live"];
-    if (minute < 13 * 60) return ["午间复核", "缩小候选池，复核上午风险信号", "pause"];
-    if (minute < 14 * 60 + 57) return ["盘中跟踪", "关注回封、量能和市场情绪变化", "live"];
-    if (minute < 15 * 60) return ["收盘集合竞价", "尾盘撮合阶段，复核真实成交与封单变化", "confirm"];
-    return ["收盘复盘", "记录候选表现，为下一交易日准备观察清单", "closed"];
+    const parts = Object.fromEntries(tradingClock.formatToParts(new Date()).map(({ type, value }) => [type, value]));
+    const minute = Number(parts.hour) * 60 + Number(parts.minute);
+    if (parts.weekday === "Sun" || parts.weekday === "Sat") return ["休市", "closed"];
+    if (minute < 9 * 60 + 15) return ["盘前", "prepare"];
+    if (minute < 9 * 60 + 25) return ["集合竞价", "live"];
+    if (minute < 9 * 60 + 30) return ["开盘前", "confirm"];
+    if (minute < 11 * 60 + 30) return ["盘中", "live"];
+    if (minute < 13 * 60) return ["午休", "pause"];
+    if (minute < 14 * 60 + 57) return ["盘中", "live"];
+    if (minute < 15 * 60) return ["收盘竞价", "confirm"];
+    return ["已收盘", "closed"];
   };
   const updatePhase = () => {
-    const [name, hint, tone] = phaseMap();
+    const [name, tone] = phaseMap();
     $("#phaseName").textContent = name;
-    $("#phaseHint").textContent = hint;
     $("#phaseDot").className = tone;
   };
   updatePhase();
@@ -192,29 +233,25 @@
     });
     renderWatch();
   };
-  const countRows = (selector) => [...document.querySelectorAll(selector)].filter((row) => !/暂无|等待|当前筛选|行情暂/.test(row.textContent)).length;
   let marketHealth = null, lastCoverage = null;
   const updateDeskMetrics = () => {
-    const auctionCount = countRows("#auctionRows tr"), ztCount = countRows("#ztRows tr"), candidateCount = countRows("#rows tr");
-    $("#visibleSummary").textContent = `竞价 ${auctionCount} · 涨停 ${ztCount} · 候选 ${candidateCount}`;
-    const statuses = ["auctionUpdated", "ztUpdated", "updated"].map((id) => document.getElementById(id)?.textContent || "");
-    const failed = statuses.filter((text) => /失败|不可用|超时|返回为空/.test(text)).length;
-    const ready = statuses.filter((text) => /更新(?:于|\s)|竞价|开盘|复盘|盘中/.test(text)).length;
     const health = $("#dataHealth");
     if (marketHealth?.state === "ready") lastCoverage = marketHealth;
     const scan = marketHealth?.state === "scanning" && lastCoverage ? lastCoverage : marketHealth;
     const ratio = scan?.total ? scan.scanned / scan.total : 0;
-    const age = scan?.capturedAt ? Math.round((Date.now() - scan.capturedAt) / 1000) : 0;
-    if (marketHealth?.state === "error") health.textContent = `全市场扫描失败 · ${lastCoverage ? `上次覆盖 ${lastCoverage.scanned}/${lastCoverage.total}` : "等待重试"}`;
-    else if (scan?.state === "ready") health.textContent = `全市场 ${scan.scanned}/${scan.total} (${Math.round(ratio * 100)}%)${scan.missingPages ? ` · 缺 ${scan.missingPages} 页` : ""}${age > 180 ? ` · ${Math.round(age / 60)} 分钟前` : ""}`;
-    else health.textContent = marketHealth?.state === "scanning" ? "全市场扫描中" : failed ? `${failed} 个模块需重试` : ready ? `${ready}/3 数据模块有响应` : "数据载入中";
-    const active = ["live", "confirm"].includes(phaseMap()[2]);
-    health.className = marketHealth?.state === "error" || (scan?.state === "ready" && (ratio < .9 || (active && age > 180) || scan.date !== new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }))) ? "warn" : scan?.state === "ready" || ready ? "ok" : "";
+    const active = ["live", "confirm"].includes(phaseMap()[1]);
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
+    const stale = scan?.state === "ready" && (scan.date !== today || (active && Date.now() - scan.capturedAt > 180000));
+    if (marketHealth?.state === "error") health.textContent = "全市场行情暂不可用";
+    else if (scan?.state === "ready") {
+      health.textContent = `全市场 ${scan.scanned}/${scan.total}${scan.missingPages ? ` · 缺 ${scan.missingPages} 页` : ""}${stale ? " · 旧快照" : ""}`;
+    } else health.textContent = marketHealth?.state === "scanning" ? "全市场扫描中" : "正在读取行情";
+    health.className = marketHealth?.state === "error" || stale || (scan?.state === "ready" && ratio < .9) ? "warn" : "";
   };
   document.addEventListener("quant:market-health", (event) => { marketHealth = event.detail; updateDeskMetrics(); });
   setInterval(updateDeskMetrics, 15000);
-  const dataRoots = ["auctionRows", "auctionMobile", "ztRows", "ztMobile", "rows", "mobile", "auctionUpdated", "ztUpdated", "updated", "error"].map((id) => document.getElementById(id)).filter(Boolean);
-  const rowObserver = new MutationObserver(() => { decorateRows(); updateDeskMetrics(); });
+  const dataRoots = ["auctionRows", "auctionMobile", "ztRows", "ztMobile", "rows", "mobile"].map((id) => document.getElementById(id)).filter(Boolean);
+  const rowObserver = new MutationObserver(decorateRows);
   dataRoots.forEach((root) => rowObserver.observe(root, { childList: true, subtree: true, characterData: true }));
   decorateRows();
   updateDeskMetrics();
@@ -246,68 +283,14 @@
   });
   $("#clearWatch")?.addEventListener("click", () => { watched = []; saveWatch(); renderWatch(); showToast("关注清单已清空"); });
 
-  desk.addEventListener("click", (event) => {
-    const action = event.target.closest("[data-workflow]");
-    if (!action) return;
-    const workflow = action.dataset.workflow;
-    if (workflow === "auction") activateView("auction");
-    if (workflow === "first" || workflow === "multi" || workflow === "broken") {
-      activateView("limitup");
-      document.querySelector(`[data-pool="${workflow === "broken" ? "zb" : "zt"}"]`)?.click();
-      if (workflow !== "broken") document.querySelector(`[data-zt="${workflow}"]`)?.click();
-    }
-    if (workflow === "liquid") {
-      activateView("watchlist");
-      const amount = $("#amount");
-      if (amount) { amount.value = "500000000"; amount.dispatchEvent(new Event("change", { bubbles: true })); }
-      document.querySelector('[data-preset="defensive"]')?.click();
-    }
-    action.classList.add("selected");
-    setTimeout(() => action.classList.remove("selected"), 1200);
-  });
-
   nav.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-target]");
     if (!button) return;
-    activateView(button.dataset.target);
-  });
-
-  const collapseKey = "quantLens.collapsedModules.v1";
-  let collapsed = [];
-  try { collapsed = JSON.parse(localStorage.getItem(collapseKey) || "[]"); } catch {}
-  sections.filter(({ id, el }) => id !== "lookup" && el?.querySelector(".cardhead")).forEach(({ id, el }) => {
-    const head = el.querySelector(".cardhead");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "section-toggle";
-    button.setAttribute("aria-label", "折叠或展开此模块");
-    const setState = (isCollapsed) => {
-      el.classList.toggle("is-collapsed", isCollapsed);
-      button.textContent = isCollapsed ? "展开" : "收起";
-      button.setAttribute("aria-expanded", String(!isCollapsed));
-    };
-    setState(collapsed.includes(id));
-    button.addEventListener("click", () => {
-      setState(!el.classList.contains("is-collapsed"));
-      collapsed = sections.filter((item) => item.el?.classList.contains("is-collapsed")).map((item) => item.id);
-      try { localStorage.setItem(collapseKey, JSON.stringify(collapsed)); } catch {}
-    });
-    head.append(button);
-  });
-
-  const focusButton = $("#focusMode");
-  let focusMode = localStorage.getItem("quantLens.focusMode") === "1";
-  const applyFocusMode = () => {
-    document.body.classList.toggle("focus-mode", focusMode);
-    focusButton.textContent = focusMode ? "完整模式" : "精简模式";
-    focusButton.setAttribute("aria-pressed", String(focusMode));
-  };
-  applyFocusMode();
-  focusButton.addEventListener("click", () => {
-    focusMode = !focusMode;
-    try { localStorage.setItem("quantLens.focusMode", focusMode ? "1" : "0"); } catch {}
-    applyFocusMode();
-    showToast(focusMode ? "已进入精简模式" : "已恢复完整模式");
+    const id = button.dataset.target;
+    const fromMore = moreItems.contains(button);
+    activateView(id);
+    if (id === "lookup") $("#stockSearch")?.focus({ preventScroll: true });
+    else if (fromMore) more.focus({ preventScroll: true });
   });
 
   $("#refreshAll")?.addEventListener("click", () => {
@@ -339,26 +322,6 @@
     showToast(`正在打开 ${code} 个股详情`);
   });
 
-  const dock = document.createElement("div");
-  dock.className = "floating-tools";
-  dock.innerHTML = `<button type="button" id="quickSearch" aria-label="搜索股票">⌕</button><button type="button" id="backTop" aria-label="返回顶部">↑</button>`;
-  document.body.append(dock);
-  $("#quickSearch")?.addEventListener("click", () => {
-    activateView("lookup");
-    setTimeout(() => $("#stockSearch")?.focus(), 350);
-  });
-  $("#backTop")?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: scrollBehavior() }));
-
-  let scrollQueued = false;
-  const updateScroll = () => {
-    dock.classList.toggle("visible", scrollY > 500);
-    scrollQueued = false;
-  };
-  addEventListener("scroll", () => {
-    if (!scrollQueued) { scrollQueued = true; requestAnimationFrame(updateScroll); }
-  }, { passive: true });
-  updateScroll();
-
   addEventListener("keydown", (event) => {
     if (event.defaultPrevented || $("dialog[open]")) return;
     const editing = document.activeElement?.matches("input, textarea, select, [contenteditable]");
@@ -367,7 +330,10 @@
       activateView("lookup");
       $("#stockSearch")?.focus();
     }
-    if (event.key === "Escape" && !watchPanel.hidden) {
+    if (event.key === "Escape" && !moreItems.hidden) {
+      setMoreOpen(false);
+      more.focus();
+    } else if (event.key === "Escape" && !watchPanel.hidden) {
       setWatchOpen(false);
       watchToggle.focus();
     }

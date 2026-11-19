@@ -6,33 +6,45 @@
   const weekdayFormat = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "short" });
   const money = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
   const safe = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
-  const quoteFields = "f3,f5,f6,f12,f14,f124";
+  const quoteFields = "f3,f5,f6,f12,f14,f104,f105,f106,f124";
   const storageKey = "quantLens.sectorVolume.v1";
   const stockFeed = shell.querySelector("#anomalyFeed");
   const stockStatus = shell.querySelector("#anomalyState");
   const stockScope = shell.querySelector("#anomalyScope");
   const stockCount = shell.querySelector("#anomalyCount");
+  const stockFoot = shell.querySelector(":scope > .anomaly-foot");
+  const stockRules = document.createElement("details");
+  stockRules.className = "market-panel-disclosure";
+  stockRules.innerHTML = "<summary>提醒说明</summary>";
+  stockFoot.before(stockRules);
+  stockRules.append(stockFoot);
   stockFeed.insertAdjacentHTML("beforebegin", `
     <div class="tabs anomaly-view-tabs" role="group" aria-label="异动类型">
       <button type="button" data-anomaly-view="stocks" aria-pressed="true" class="active">个股异动</button>
-      <button type="button" data-anomaly-view="boards" aria-pressed="false">板块异动 <span id="sectorAlertCount">0</span></button>
+      <button type="button" data-anomaly-view="boards" aria-pressed="false">板块异动 <span id="sectorAlertCount" hidden></span></button>
     </div>`);
   stockFeed.insertAdjacentHTML("afterend", `
     <div id="sectorAnomaly" hidden>
       <div class="sector-anomaly-toolbar">
         <p id="sectorAnomalyStatus" role="status">等待板块报价</p>
         <div>
-          <label>板块 <select id="sectorAnomalyKind"><option value="">全部</option><option value="industry">行业</option><option value="concept">概念</option></select></label>
-          <label>方向 <select id="sectorAnomalyDirection"><option value="">全部</option><option value="up">放量</option><option value="down">缩量</option></select></label>
+          <select id="sectorAnomalyKind" aria-label="板块类型"><option value="">全部板块</option><option value="industry">行业</option><option value="concept">概念</option></select>
+          <select id="sectorAnomalyDirection" aria-label="放量或缩量"><option value="">全部方向</option><option value="up">放量</option><option value="down">缩量</option></select>
         </div>
       </div>
       <div id="sectorAnomalyFeed" class="sector-anomaly-feed"></div>
-      <p class="anomaly-foot">按相邻约 1 分钟的新增成交量速度比较。达到前窗 1.8 倍为放量，低于或等于 0.5 倍为缩量，前窗成交额需达到每分钟 500 万元。连续竞价期间约每 25 秒尝试刷新，午休后重新建立基线。</p>
+      <details class="market-panel-disclosure">
+        <summary>放量和缩量怎么算</summary>
+        <p>比较相邻两个约 1 分钟时间段的新增成交量速度。达到前一段的 1.8 倍记为放量，降到 0.5 倍或以下记为缩量。</p>
+        <p>前一段每分钟成交额至少 500 万元，放量时后一段也须达到此门槛。连续竞价期间约每 25 秒刷新，午休后重新积累基线。</p>
+      </details>
     </div>`);
   const $ = (selector) => shell.querySelector(selector);
   const panel = $("#sectorAnomaly");
+  const feed = $("#sectorAnomalyFeed");
   const history = new Map(), directions = new Map(), cooldown = new Map(), warmed = new Set();
   let day = "", sessionStart = 0, alerts = [], busy = false, health = "idle", coverage = 0, total = 0, latest = 0, comparable = 0;
+  let renderedFeed = "";
 
   function session(now) {
     const date = dayFormat.format(now);
@@ -87,6 +99,17 @@
     return nearest;
   }
 
+  function industryBreadth(board, quote, now, current) {
+    if (board.kind !== "industry") return null;
+    const at = Number(quote.f124) * 1000;
+    if (!Number.isFinite(at) || at < current.start || at >= current.end || at > now + 5000 || now - at > 75000) return null;
+    const counts = [quote.f104, quote.f105, quote.f106];
+    if (!counts.every((count) => /^\d+$/.test(String(count)))) return null;
+    const [up, down, flat] = counts.map(Number);
+    if (up + down + flat === 0) return null;
+    return { name: quote.f14 || board.name, at, up, down, flat };
+  }
+
   function observe(board, quote, now, current) {
     const at = Number(quote.f124) * 1000;
     const volume = Number(quote.f5), amount = Number(quote.f6);
@@ -133,29 +156,42 @@
   }
 
   function render() {
-    $("#sectorAlertCount").textContent = alerts.length;
+    const count = $("#sectorAlertCount");
+    count.textContent = alerts.length;
+    count.hidden = !alerts.length;
     if (panel.hidden) return;
     const now = Date.now(), current = session(now);
     const scope = $("#sectorAnomalyKind").value, direction = $("#sectorAnomalyDirection").value;
     const filtered = alerts.filter((row) => (!scope || row.kind === scope) && (!direction || row.direction === direction));
-    let status = "等待有效板块报价";
-    if (!current.start) status = "非连续竞价时段 · 保留今日提醒";
-    else if (health === "error") status = "板块报价暂不可用 · 等待下一轮";
+    let status = "等待板块报价";
+    if (!current.start) status = "盘中更新 · 保留今日提醒";
+    else if (health === "error") status = "板块报价暂不可用";
     else if (coverage && latest && now - latest <= 75000) {
       status = `报价 ${timeFormat.format(latest)} · ${coverage}/${total} 个板块${comparable ? "" : " · 正在积累约 2 分钟基线"}`;
     } else if (latest) status = `报价已过 ${Math.round((now - latest) / 1000)} 秒 · 等待更新`;
     $("#sectorAnomalyStatus").textContent = status;
-    $("#sectorAnomalyFeed").innerHTML = filtered.map((row) => {
-      const label = row.direction === "up" ? "板块放量" : "板块缩量";
+    const markup = filtered.map((row) => {
+      const label = row.direction === "up" ? "放量" : "缩量";
       const move = Number.isFinite(row.pct) ? `${row.pct > 0 ? "+" : ""}${row.pct.toFixed(2)}%` : "—";
+      const speed = `${money.format(row.earlierRate)} → ${money.format(row.recentRate)} 手/分钟`;
       return `<button type="button" class="sector-alert-card" data-sector-alert="${safe(row.code)}" data-direction="${row.direction}" data-seen-at="${row.seenAt}">
-        <span class="sector-alert-top"><b>${safe(row.name)}</b><small>${row.kind === "industry" ? "行业" : "概念"}</small><strong class="sector-alert-tag">${label}</strong></span>
-        <span class="sector-alert-metrics"><b>${row.ratio.toFixed(2)}×</b> 前一窗速度 · 板块涨跌 ${move}</span>
-        <span class="sector-alert-detail">${money.format(row.earlierRate)} → ${money.format(row.recentRate)} 手/分钟 · 近窗成交 ${money.format(row.recentAmount)} 元/分钟</span>
-        <span class="sector-alert-detail">报价 ${timeFormat.format(row.quoteAt)} · 发现 ${timeFormat.format(row.seenAt)} · ${row.recentSeconds}/${row.earlierSeconds} 秒窗</span>
-        <span class="sector-alert-link">查看成分股 ›</span>
+        <span class="sector-alert-top"><b>${safe(row.name)}</b><small>${row.kind === "industry" ? "行业" : "概念"}</small><strong class="sector-alert-tag">${label} ${row.ratio.toFixed(2)}×</strong></span>
+        <span class="sector-alert-metrics" title="${safe(speed)}">涨跌 ${move} · 近窗成交 ${money.format(row.recentAmount)} 元/分钟</span>
+        <span class="sector-alert-meta">
+          <span class="sector-alert-detail">报价 ${timeFormat.format(row.quoteAt)} · 发现 ${timeFormat.format(row.seenAt)}</span>
+          <span class="sector-alert-link">成分股 ›</span>
+        </span>
       </button>`;
-    }).join("") || '<div class="anomaly-empty">当前筛选暂无板块异动</div>';
+    }).join("") || '<div class="anomaly-empty">暂无板块异动</div>';
+    if (markup === renderedFeed) return;
+    const focused = feed.contains(document.activeElement) ? document.activeElement.dataset : null;
+    feed.innerHTML = renderedFeed = markup;
+    if (focused) {
+      const match = Array.from(feed.querySelectorAll("[data-sector-alert]")).find((button) =>
+        button.dataset.sectorAlert === focused.sectorAlert && button.dataset.seenAt === focused.seenAt &&
+          button.dataset.direction === focused.direction);
+      match?.focus({ preventScroll: true });
+    }
   }
 
   async function poll() {
@@ -173,13 +209,18 @@
       coverage = comparable = 0;
       health = quotes.length ? "ready" : "error";
       const byCode = new Map(quotes.map((row) => [row.f12, row]));
-      const found = [];
+      const found = [], breadth = [];
       for (const board of directory.boards) {
         const quote = byCode.get(board.code);
         if (!quote) continue;
+        const industry = industryBreadth(board, quote, now, current);
+        if (industry) breadth.push(industry);
         const alert = observe(board, quote, now, current);
         if (alert) found.push(alert);
       }
+      if (breadth.length) document.dispatchEvent(new CustomEvent("quant:sector-breadth", {
+        detail: { date: current.date, boards: breadth }
+      }));
       if (found.length) {
         found.sort((a, b) => Math.abs(Math.log(b.ratio)) - Math.abs(Math.log(a.ratio)));
         alerts = [...found, ...alerts].slice(0, 60);
@@ -193,7 +234,7 @@
   function setView(view) {
     const board = view === "boards";
     panel.hidden = !board;
-    stockFeed.hidden = stockStatus.hidden = stockScope.hidden = stockCount.hidden = board;
+    stockFeed.hidden = stockStatus.hidden = stockScope.hidden = stockCount.hidden = stockRules.hidden = board;
     shell.querySelectorAll("[data-anomaly-view]").forEach((button) => {
       const active = button.dataset.anomalyView === view;
       button.classList.toggle("active", active);
@@ -206,7 +247,7 @@
     if (button) setView(button.dataset.anomalyView);
   });
   panel.addEventListener("change", render);
-  $("#sectorAnomalyFeed").addEventListener("click", (event) => {
+  feed.addEventListener("click", (event) => {
     const button = event.target.closest("[data-sector-alert]");
     if (!button) return;
     const row = alerts.find((item) => item.code === button.dataset.sectorAlert &&
