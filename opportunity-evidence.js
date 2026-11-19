@@ -20,13 +20,13 @@
   const average = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
   const signed = (n, digits = 1) => `${n > 0 ? "+" : ""}${n.toFixed(digits)}%`;
 
-  async function fetchJson(endpoint, params) {
+  async function fetchJson(endpoint, params, referrerPolicy) {
     const url = new URL(endpoint);
     url.search = new URLSearchParams(params);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5500);
     try {
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await fetch(url, { signal: controller.signal, referrerPolicy });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();
     } finally { clearTimeout(timeout); }
@@ -104,7 +104,7 @@
     const result = await fetchJson(noticeEndpoint, {
       sr: -1, page_size: 12, page_index: 1, ann_type: "A", client_source: "web",
       stock_list: code, f_node: 0, s_node: 0
-    });
+    }, "no-referrer");
     if (!Array.isArray(result?.data?.list)) throw new Error("公司公告暂不可用");
     const notices = [];
     for (const row of result.data.list) {
