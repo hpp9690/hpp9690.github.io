@@ -11,20 +11,39 @@
   shell.dataset.module = "concept";
   shell.className = "concept-panel";
   shell.hidden = document.body.dataset.view !== "concept";
-  shell.setAttribute("aria-label", "概念板块选股器");
-  shell.innerHTML = `<div class="concept-head"><div><p class="eyebrow">CONCEPT STOCK SCREENER</p><h2>概念板块选股器</h2><p>搜索概念 → 查看全部成分股 → 按盘面强度筛选龙头候选。</p></div><span id="conceptHealth">正在读取板块目录</span></div><form id="conceptForm" class="concept-search"><input id="conceptQuery" type="search" autocomplete="off" placeholder="搜索概念，如 机器人、AI应用、PCB" aria-label="搜索概念板块"><button type="submit">搜索板块</button><button type="button" id="conceptReload">更新目录</button></form><div class="concept-presets"><button type="button" data-concept-example="机器人">机器人</button><button type="button" data-concept-example="AI应用">AI应用</button><button type="button" data-concept-example="PCB">PCB</button></div><div id="conceptMatches" class="concept-matches"></div><div id="conceptResult" class="concept-result" hidden><div class="concept-board-head"><div><p class="eyebrow">当前板块</p><h3 id="conceptBoardName">—</h3><p id="conceptBoardMeta">读取成分股中</p></div><span id="conceptBoardMove">—</span></div><div id="conceptLeaders" class="concept-leaders"></div><div class="concept-filters"><label>市场 <select id="conceptMarket"><option value="all">全部A股</option><option value="main">沪深主板</option><option value="growth">创业板</option><option value="star">科创板</option><option value="beijing">北交所</option></select></label><label>涨幅 <select id="conceptGain"><option value="-100">不限</option><option value="0">≥0%</option><option value="2">≥2%</option><option value="5">≥5%</option></select></label><label>成交额 <select id="conceptAmount"><option value="0">不限</option><option value="50000000">≥5000万</option><option value="200000000">≥2亿</option></select></label><label>排序 <select id="conceptSort"><option value="leader">盘面强度</option><option value="pct">涨幅</option><option value="amount">成交额</option><option value="turnover">换手率</option><option value="cap">流通市值</option></select></label></div><div id="conceptCount" class="concept-count"></div><div id="conceptStocks" class="concept-stocks"></div><button type="button" id="conceptMore" hidden>显示更多成分股</button><p class="concept-note">“盘面龙头候选”按板块内涨幅、成交额、换手和流通市值排序，不代表公司业务地位或后续涨幅。公开行情可能延迟、缺页或调整板块成分。</p></div>`;
+  shell.setAttribute("aria-label", "板块");
+  shell.innerHTML = `<div class="concept-head"><h2>板块总览</h2></div>
+    <form id="conceptForm" class="concept-search">
+      <input id="conceptQuery" type="search" autocomplete="off" placeholder="搜索板块，如机器人、PCB" aria-label="搜索行业或概念">
+      <button type="submit">搜索</button>
+    </form>
+    <section id="boardOverview" aria-label="板块涨跌排行"></section>
+    <p id="conceptHealth" class="board-catalogue-status" hidden></p>
+    <div id="conceptMatches" class="concept-matches" hidden></div>
+    <div id="conceptResult" class="concept-result" hidden>
+      <div class="concept-board-head"><div><h3 id="conceptBoardName" tabindex="-1">—</h3><p id="conceptBoardMeta">读取成分股中</p></div><span id="conceptBoardMove">—</span></div>
+      <div class="board-detail-charts">
+        <figure id="conceptTrend" class="board-trend" hidden></figure>
+        <div id="conceptBreadth" class="board-breadth" hidden></div>
+      </div>
+      <div id="conceptLeaders" class="concept-leaders"></div>
+      <div class="concept-filters"><label>市场 <select id="conceptMarket"><option value="all">全部A股</option><option value="main">沪深主板</option><option value="growth">创业板</option><option value="star">科创板</option><option value="beijing">北交所</option></select></label><label>涨幅 <select id="conceptGain"><option value="-100">不限</option><option value="0">≥0%</option><option value="2">≥2%</option><option value="5">≥5%</option></select></label><label>成交额 <select id="conceptAmount"><option value="0">不限</option><option value="50000000">≥5000万</option><option value="200000000">≥2亿</option></select></label><label>排序 <select id="conceptSort"><option value="leader">盘面强度</option><option value="pct">涨幅</option><option value="amount">成交额</option><option value="turnover">换手率</option><option value="cap">流通市值</option></select></label></div>
+      <div id="conceptCount" class="concept-count"></div><div id="conceptStocks" class="concept-stocks"></div>
+      <button type="button" id="conceptMore" hidden>显示更多成分股</button>
+      <details class="market-panel-disclosure"><summary>盘面强度说明</summary><p>龙头候选按板块内涨幅、成交额、换手和流通市值排序。公开行情可能延迟、缺页或调整板块成分。</p></details>
+    </div>`;
   ($(".opportunity-panel") || $(".decision-desk"))?.after(shell);
   $("#conceptQuery").insertAdjacentHTML("afterend", `<button type="button" id="conceptClear" aria-label="清除搜索内容" hidden>×</button>`);
-  $("#conceptBoardMove").insertAdjacentHTML("afterend", `<button type="button" id="conceptChange">更换板块</button>`);
+  $("#conceptBoardMove").insertAdjacentHTML("afterend", `<button type="button" id="conceptChange">返回总览</button>`);
   $(".concept-filters", shell).insertAdjacentHTML("beforebegin", `<div class="concept-sort-tabs" role="group" aria-label="成分股排序"><button type="button" data-concept-sort="leader" class="active" aria-pressed="true">综合</button><button type="button" data-concept-sort="pct" aria-pressed="false">涨幅</button><button type="button" data-concept-sort="amount" aria-pressed="false">成交</button><button type="button" data-concept-sort="turnover" aria-pressed="false">换手</button><button type="button" data-concept-sort="cap" aria-pressed="false">市值</button></div>`);
   $("#conceptSort").closest("label").hidden = true;
   $(".concept-filters", shell).insertAdjacentHTML("beforeend", `<button type="button" id="conceptReset">重置筛选</button>`);
   $("#conceptMatches").setAttribute("aria-live", "polite");
   $("#conceptHealth").setAttribute("role", "status");
-  let boards = [], selected = null, members = [], filterLimit = 40, queryLimit = 12, catalogueAt = 0, selectionToken = 0, searchOpen = true, directoryDate = "";
+  let boards = [], selected = null, members = [], filterLimit = 40, queryLimit = 12, catalogueAt = 0, selectionToken = 0, searchOpen = true, browseOpen = false, directoryReady = false;
   let recentCodes = [];
   try { recentCodes = JSON.parse(localStorage.getItem("quantLens.conceptRecent.v1") || "[]").filter((x) => /^BK\d+$/.test(x)).slice(0, 5); } catch {}
-  try { const cached = JSON.parse(localStorage.getItem(cacheKey) || "{}"); if (Date.now() - cached.at < 6 * 3600000 && Array.isArray(cached.boards)) { boards = cached.boards; catalogueAt = cached.at; } } catch {}
+  try { const cached = JSON.parse(localStorage.getItem(cacheKey) || "{}"); if (Date.now() - cached.at < 6 * 3600000 && Array.isArray(cached.boards)) { boards = cached.boards.map((board) => ({ ...board, kind: "concept" })); catalogueAt = cached.at; } } catch {}
   const request = async (params) => {
     const url = new URL("https://push2.eastmoney.com/api/qt/clist/get");
     url.search = new URLSearchParams({ po: "1", np: "1", fltt: "2", invt: "2", ...params, _: String(Date.now()) });
@@ -39,18 +58,42 @@
   };
   const boardPage = (page) => request({ pn: String(page), pz: "100", fid: "f12", fs: "m:90+t:3", fields: "f12,f14,f3,f6,f104,f105,f106,f124" });
   const memberPage = (code, page) => request({ pn: String(page), pz: "100", fid: "f12", fs: `b:${code}`, fields: "f2,f3,f6,f8,f10,f12,f14,f20,f21,f124" });
+  const kindLabel = (board) => board.kind === "industry" ? "行业" : "概念";
+  const recentRank = (code) => recentCodes.includes(code) ? recentCodes.indexOf(code) : recentCodes.length;
+  const matchesQuery = (query) => boards.filter((board) => query
+    ? compact(board.name).includes(query) : board.kind === overview.kind()
+  ).sort((a, b) => (query ? Number(compact(b.name) === query) - Number(compact(a.name) === query)
+    : recentRank(a.code) - recentRank(b.code)) || a.name.localeCompare(b.name, "zh-CN"));
   const renderMatches = () => {
-    const query = compact($("#conceptQuery").value);
-    const matches = boards.filter((x) => !query || compact(x.name).includes(query)).sort((a, b) => (query ? Number(compact(b.name) === query) - Number(compact(a.name) === query) : Number(recentCodes.includes(b.code)) - Number(recentCodes.includes(a.code))) || b.pct - a.pct);
-    $("#conceptMatches").hidden = !searchOpen;
-    $("#conceptClear").hidden = !$("#conceptQuery").value;
-    $("#conceptMatches").innerHTML = matches.slice(0, queryLimit).map((x) => `<button type="button" data-board="${safe(x.code)}" class="${selected?.code === x.code ? "active" : ""}"><b>${safe(x.name)}${!query && recentCodes.includes(x.code) ? `<small>最近查看</small>` : ""}</b><span class="${x.pct >= 0 ? "up" : "down"}">${pct(x.pct)}</span></button>`).join("") + (matches.length > queryLimit ? `<button type="button" data-more-boards="1">显示更多 · ${matches.length} 个板块</button>` : "") || `<div class="concept-empty">${boards.length ? "没有匹配的概念板块，试试更短的关键词" : "正在读取概念板块目录"}</div>`;
-    $("#conceptHealth").textContent = boards.length
-      ? `${boards.length} 个概念板块${directoryDate ? ` · 目录 ${directoryDate}` : ""}`
-      : "概念板块目录暂不可用";
+    const raw = $("#conceptQuery").value;
+    const query = compact(raw);
+    const showing = searchOpen && (Boolean(raw.trim()) || browseOpen);
+    const list = $("#conceptMatches"), status = $("#conceptHealth");
+    $("#boardOverview").hidden = !searchOpen || Boolean(raw.trim());
+    $("#conceptClear").hidden = !raw;
+    list.hidden = status.hidden = !showing;
+    overview.setBrowse(browseOpen);
+    if (!showing) return;
+    const matches = matchesQuery(query);
+    status.textContent = matches.length ? `${query ? "搜索结果" : kindLabel({ kind: overview.kind() }) + "目录"} · ${matches.length} 个板块` : "";
+    list.innerHTML = matches.slice(0, queryLimit).map((board) => {
+      const quote = overview.quote(board);
+      return `<button type="button" data-board="${safe(board.code)}"><b>${safe(board.name)} <small>${kindLabel(board)}</small></b>
+        <span class="${quote ? quote.pct >= 0 ? "up" : "down" : "muted"}">${quote ? pct(quote.pct) : "成分股 ›"}</span></button>`;
+    }).join("") + (matches.length > queryLimit ? `<button type="button" data-more-boards>继续查看 · ${matches.length - queryLimit} 个</button>` : "")
+      || `<div class="concept-empty">${boards.length ? "没有匹配的板块" : directoryReady ? "板块目录暂不可用" : "正在读取板块目录"}</div>`;
+  };
+  const overview = window.QuantBoardOverview.mount($("#boardOverview"), {
+    onSelect: (board) => selectBoard(board.code, board),
+    onType: () => { queryLimit = 12; renderMatches(); },
+    onBrowse: () => { browseOpen = !browseOpen; queryLimit = 12; renderMatches(); }
+  });
+  const mergeBoards = (entries) => {
+    const merged = new Map(boards.map((board) => [board.code, board]));
+    for (const board of entries) merged.set(board.code, board);
+    boards = [...merged.values()];
   };
   const fetchBoards = async () => {
-    $("#conceptHealth").textContent = "正在更新概念板块目录";
     try {
       const first = await boardPage(1), pages = Math.ceil(first.total / 100), rows = [...first.rows], failed = [];
       for (let start = 2; start <= pages; start += 4) {
@@ -59,29 +102,18 @@
         results.forEach((r, i) => { if (r.status === "fulfilled") rows.push(...r.value.rows); else failed.push(nums[i]); });
       }
       if (failed.length) { const retry = await Promise.allSettled(failed.map(boardPage)); retry.forEach((r) => { if (r.status === "fulfilled") rows.push(...r.value.rows); }); }
-      const next = [...new Map(rows.filter((x) => /^BK\d+$/.test(x.f12 || "")).map((x) => [x.f12, { code: x.f12, name: x.f14, pct: Number(x.f3) || 0, up: Number(x.f104) || 0, down: Number(x.f105) || 0, at: Number(x.f124) * 1000 || 0 }])).values()];
+      const next = [...new Map(rows.filter((x) => /^BK\d+$/.test(x.f12 || "") && typeof x.f14 === "string")
+        .map((x) => [x.f12, { code: x.f12, name: x.f14, kind: "concept" }])).values()];
       if (!next.length) throw new Error("板块目录为空");
-      boards = next; catalogueAt = Date.now(); directoryDate = "";
-      try { localStorage.setItem(cacheKey, JSON.stringify({ at: catalogueAt, boards })); } catch {}
-      renderMatches();
-      if (boards.length < first.total) $("#conceptHealth").textContent = `已载入 ${boards.length}/${first.total} 个板块 · 部分目录缺页`;
-    } catch {
-      if (!boards.length) {
-        try {
-          const fallback = await window.QuantBoards.directory();
-          boards = fallback.boards.filter((board) => board.kind === "concept");
-          directoryDate = fallback.date;
-          catalogueAt = Date.now();
-        } catch {}
-      }
-      renderMatches();
-      if (!boards.length) $("#conceptHealth").textContent = "板块目录读取失败，请重试";
-    }
+      mergeBoards(next);
+      try { localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), boards: next })); } catch {}
+    } catch {}
+    finally { catalogueAt = Date.now(); renderMatches(); }
   };
   let catalogueRequest;
-  const loadBoards = (force = false) => {
+  const loadBoards = () => {
     if (catalogueRequest) return catalogueRequest;
-    if (!force && boards.length && Date.now() - catalogueAt < 15 * 60000) {
+    if (Date.now() - catalogueAt < 15 * 60000) {
       renderMatches();
       return Promise.resolve();
     }
@@ -148,29 +180,38 @@
   const selectBoard = async (code, suppliedBoard) => {
     const board = suppliedBoard || boards.find((x) => x.code === code); if (!board) return;
     const token = ++selectionToken;
-    selected = board; members = []; filterLimit = 40; searchOpen = false;
+    selected = board; members = []; filterLimit = 40; searchOpen = false; browseOpen = false;
+    $("#conceptReset").click();
     if (board.kind !== "industry") {
       recentCodes = [code, ...recentCodes.filter((x) => x !== code)].slice(0, 5);
       try { localStorage.setItem("quantLens.conceptRecent.v1", JSON.stringify(recentCodes)); } catch {}
     }
-    $(".concept-head h2", shell).textContent = board.kind === "industry" ? "行业板块成分股" : "概念板块选股器";
     $("#conceptQuery").value = board.name;
-    $(".concept-presets").hidden = true;
-    $("#conceptMatches").hidden = true;
     $("#conceptResult").hidden = false; $("#conceptBoardName").textContent = board.name;
-    $("#conceptBoardMove").textContent = pct(board.pct);
-    $("#conceptBoardMove").className = Number.isFinite(board.pct) ? (board.pct >= 0 ? "up" : "down") : "muted";
+    const quote = Number.isFinite(board.pct) ? board : overview.quote(board);
+    const showMove = (value, at) => {
+      const move = $("#conceptBoardMove");
+      move.textContent = pct(value);
+      move.className = Number.isFinite(value) ? (value >= 0 ? "up" : "down") : "muted";
+      move.title = at ? `板块报价 ${new Date(at).toLocaleString("zh-CN", { timeZone: zone })}` : "";
+    };
+    showMove(quote?.pct, quote?.at);
+    window.QuantBoardOverview.showBreadth($("#conceptBreadth"), []);
+    window.QuantBoardOverview.showTrend($("#conceptTrend"), null);
+    window.QuantBoards.trend(code).then((trend) => {
+      if (token === selectionToken) window.QuantBoardOverview.showTrend($("#conceptTrend"), trend);
+    }).catch(() => {});
     $("#conceptBoardMeta").textContent = "正在读取板块成分股…";
     $("#conceptLeaders").innerHTML = `<div class="concept-loading">正在计算板块盘面强度…</div>`;
     $("#conceptStocks").innerHTML = `<div class="concept-loading">正在读取成分股…</div>`;
     $("#conceptResult").setAttribute("aria-busy", "true");
     renderMatches();
-    if (!Number.isFinite(board.pct)) {
-      window.QuantBoards.quotes([`90.${code}`], "f12,f3").then((rows) => {
-        const value = Number(rows.find((row) => row.f12 === code)?.f3);
-        if (token !== selectionToken || !Number.isFinite(value)) return;
-        $("#conceptBoardMove").textContent = pct(value);
-        $("#conceptBoardMove").className = value >= 0 ? "up" : "down";
+    $("#conceptBoardName").focus({ preventScroll: true });
+    if (!quote) {
+      window.QuantBoards.quotes([`90.${code}`], "f12,f3,f124").then((rows) => {
+        const value = rows.find((row) => row.f12 === code);
+        if (token !== selectionToken || value?.f3 == null || value.f3 === "" || !Number.isFinite(Number(value.f3))) return;
+        showMove(Number(value.f3), (Number(value.f124) || 0) * 1000);
       }).catch(() => {});
     }
     const showMembers = (result, loadingQuotes = false) => {
@@ -179,8 +220,10 @@
       const latest = Math.max(0, ...members.map((x) => x.at || 0));
       const stamp = latest ? `报价 ${new Date(latest).toLocaleString("zh-CN", { timeZone: zone })}` : "报价时间未知";
       const quoted = members.filter((x) => x.quoted).length;
-      const quoteStatus = loadingQuotes ? "正在读取个股报价" : `已取报价 ${quoted} 只 · ${stamp}`;
+      const tencent = members.filter((x) => x.quoted && x.provider === "tencent").length;
+      const quoteStatus = loadingQuotes ? "正在读取个股报价" : `已取报价 ${quoted} 只 · ${stamp}${tencent ? ` · 腾讯补充 ${tencent} 只` : ""}`;
       $("#conceptBoardMeta").textContent = `${members.length}/${result.total} 只成分股 · ${quoteStatus}${members.length < result.total ? " · 部分缺页" : ""}`;
+      window.QuantBoardOverview.showBreadth($("#conceptBreadth"), members);
       renderMembers();
     };
     try {
@@ -192,22 +235,19 @@
   const revealSearch = (clear = false) => {
     searchOpen = true; queryLimit = 12;
     if (clear) $("#conceptQuery").value = "";
-    $(".concept-presets").hidden = false;
     $("#conceptResult").hidden = true;
-    $(".concept-head h2", shell).textContent = "概念板块选股器";
     renderMatches();
   };
   document.addEventListener("quant:open-board", (event) => {
     const board = event.detail;
     if (!/^BK\d+$/.test(board?.code || "") || typeof board.name !== "string") return;
-    $("#conceptReset").click();
     document.dispatchEvent(new CustomEvent("quant:open-view", { detail: { id: "concept" } }));
     selectBoard(board.code, board);
   });
   document.addEventListener("quant:open-concept", async (event) => {
     const name = event.detail?.name?.trim();
     if (!name) return;
-    const findBoard = () => boards.find((board) => board.name === name);
+    const findBoard = () => boards.find((board) => board.kind === "concept" && board.name === name);
     document.dispatchEvent(new CustomEvent("quant:open-view", { detail: { id: "concept" } }));
     const board = findBoard();
     if (board) {
@@ -218,26 +258,42 @@
     const token = selectionToken;
     query.value = name;
     revealSearch();
-    await loadBoards(true);
+    await directoryTask;
+    if (!findBoard()) await loadBoards();
     if (token !== selectionToken || query.value !== name || document.body.dataset.view !== "concept") return;
     const refreshedBoard = findBoard();
     if (refreshedBoard) selectBoard(refreshedBoard.code);
   });
-  $("#conceptQuery").addEventListener("input", () => revealSearch());
-  $("#conceptQuery").addEventListener("focus", () => { if (!searchOpen) revealSearch(); });
+  $("#conceptQuery").addEventListener("input", () => {
+    revealSearch();
+    if ($("#conceptQuery").value.trim()) loadBoards();
+  });
   $("#conceptQuery").addEventListener("keydown", (event) => {
     if (event.key === "ArrowDown") { const first = $("#conceptMatches [data-board]"); if (first) { event.preventDefault(); first.focus(); } }
-    if (event.key === "Escape" && selected) { searchOpen = false; $("#conceptMatches").hidden = true; $("#conceptResult").hidden = false; $("#conceptQuery").blur(); }
+    if (event.key === "Escape" && selected) { searchOpen = false; $("#conceptQuery").value = selected.name; $("#conceptResult").hidden = false; renderMatches(); $("#conceptBoardName").focus(); }
   });
   $("#conceptMatches").addEventListener("keydown", (event) => {
     const choices = [...$("#conceptMatches").querySelectorAll("[data-board]")], index = choices.indexOf(document.activeElement);
     if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); (choices[index + (event.key === "ArrowDown" ? 1 : -1)] || choices[event.key === "ArrowDown" ? 0 : choices.length - 1])?.focus(); }
     if (event.key === "Escape") { event.preventDefault(); $("#conceptQuery").focus(); }
   });
-  $("#conceptForm").addEventListener("submit", (event) => { event.preventDefault(); const query = compact($("#conceptQuery").value); if (!query) { renderMatches(); return; } const match = boards.find((x) => compact(x.name) === query) || boards.find((x) => compact(x.name).includes(query)); if (match) selectBoard(match.code); else renderMatches(); });
-  $("#conceptReload").addEventListener("click", () => loadBoards(true));
+  $("#conceptForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const value = $("#conceptQuery").value, query = compact(value);
+    if (!query) { renderMatches(); return; }
+    await directoryTask;
+    const match = matchesQuery(query)[0];
+    if ($("#conceptQuery").value !== value) return;
+    if (match) selectBoard(match.code);
+    else renderMatches();
+  });
   $("#conceptClear").addEventListener("click", () => { revealSearch(true); $("#conceptQuery").focus(); });
-  $("#conceptChange").addEventListener("click", () => { revealSearch(true); $("#conceptQuery").focus(); });
+  $("#conceptChange").addEventListener("click", () => {
+    selectionToken++;
+    selected = null;
+    revealSearch(true);
+    $("#conceptQuery").focus({ preventScroll: true });
+  });
   $("#conceptReset").addEventListener("click", () => {
     $("#conceptMarket").value = "all"; $("#conceptGain").value = "-100"; $("#conceptAmount").value = "0"; $("#conceptSort").value = "leader";
     shell.querySelectorAll("[data-concept-sort]").forEach((x) => { const active = x.dataset.conceptSort === "leader"; x.classList.toggle("active", active); x.setAttribute("aria-pressed", String(active)); });
@@ -245,15 +301,30 @@
   });
   shell.addEventListener("click", (event) => {
     const sort = event.target.closest("[data-concept-sort]"); if (sort) { $("#conceptSort").value = sort.dataset.conceptSort; shell.querySelectorAll("[data-concept-sort]").forEach((x) => { const active = x === sort; x.classList.toggle("active", active); x.setAttribute("aria-pressed", String(active)); }); filterLimit = 40; renderMembers(); return; }
-    const preset = event.target.closest("[data-concept-example]"); if (preset) { $("#conceptQuery").value = preset.dataset.conceptExample; renderMatches(); const first = boards.find((x) => compact(x.name).includes(compact(preset.dataset.conceptExample))); if (first) selectBoard(first.code); return; }
     const board = event.target.closest("[data-board]"); if (board) { selectBoard(board.dataset.board); return; }
-    if (event.target.closest("[data-more-boards]")) { queryLimit += 36; renderMatches(); return; }
+    if (event.target.closest("[data-more-boards]")) {
+      const firstNew = queryLimit;
+      queryLimit += 24;
+      renderMatches();
+      $("#conceptMatches").querySelectorAll("[data-board]")[firstNew]?.focus();
+      return;
+    }
     const open = event.target.closest("[data-stock-open]"); if (open) { const input = $("#stockSearch"), form = $("#lookupForm"); if (input && form) { document.dispatchEvent(new CustomEvent("quant:open-view", { detail: { id: "lookup" } })); input.value = open.dataset.stockOpen; form.requestSubmit(); } return; }
     const watch = event.target.closest("[data-stock-watch]"); if (watch) { const item = members.find((x) => x.code === watch.dataset.stockWatch); if (item) document.dispatchEvent(new CustomEvent("quant:watch-request", { detail: { code: item.code, name: item.name } })); }
   });
   ["conceptMarket", "conceptGain", "conceptAmount", "conceptSort"].forEach((id) => $("#" + id).addEventListener("change", () => { filterLimit = 40; renderMembers(); }));
   $("#conceptMore").addEventListener("click", () => { filterLimit += 40; renderMembers(); });
   document.addEventListener("quant:watchlist-changed", renderMembers);
-  renderMatches(); loadBoards();
+  document.addEventListener("quant:board-quotes-snapshot", (event) => overview.accept(event.detail));
+  document.addEventListener("quant:view-changed", (event) => { if (event.detail?.id === "concept") overview.refresh(); });
+  document.addEventListener("quant:refresh-market", () => { if (!shell.hidden) overview.refresh(true); });
+  const directoryTask = window.QuantBoards.directory().then(({ boards: entries }) => {
+    mergeBoards(entries);
+  }).catch(() => {}).finally(() => {
+    directoryReady = true;
+    renderMatches();
+  });
+  renderMatches();
+  if (!shell.hidden) overview.refresh();
 })();
 

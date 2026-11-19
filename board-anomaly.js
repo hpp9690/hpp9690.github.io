@@ -6,7 +6,6 @@
   const weekdayFormat = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "short" });
   const money = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
   const safe = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
-  const quoteFields = "f3,f5,f6,f12,f14,f104,f105,f106,f124";
   const storageKey = "quantLens.sectorVolume.v1";
   const stockFeed = shell.querySelector("#anomalyFeed");
   const stockStatus = shell.querySelector("#anomalyState");
@@ -194,14 +193,13 @@
     }
   }
 
-  async function poll() {
+  async function poll(force = false) {
     const current = session(Date.now());
     synchronize(current);
     if (busy || !current.start) { render(); return; }
     busy = true;
     try {
-      const directory = await window.QuantBoards.directory();
-      const quotes = await window.QuantBoards.quotes(directory.boards.map((board) => `90.${board.code}`), quoteFields);
+      const { catalogue: directory, rows: quotes } = await window.QuantBoards.snapshot({ force });
       const now = Date.now(), active = session(now);
       synchronize(active);
       if (active.start !== current.start || active.date !== current.date) return;
@@ -254,7 +252,7 @@
       item.direction === button.dataset.direction && item.seenAt === Number(button.dataset.seenAt));
     if (row) document.dispatchEvent(new CustomEvent("quant:open-board", { detail: row }));
   });
-  document.addEventListener("quant:refresh-market", poll);
+  document.addEventListener("quant:refresh-market", () => poll(true));
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") poll(); });
   setInterval(poll, 25000);
   poll();
