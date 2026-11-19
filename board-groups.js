@@ -46,6 +46,10 @@
   ];
   const byIndustry = new Map(groups.flatMap((group) => group.industries.split(" ").map((code) => [`BK${code}`, group])));
   const fallback = groups.at(-1);
+  const themeOverrides = {
+    BK0955: "consumer", BK0865: "consumer", BK0933: "consumer", BK1653: "consumer",
+    BK1124: "digital", BK0975: "industry", BK1082: "energy"
+  };
   const themePriority = ["health", "electronics", "industry", "transport", "energy", "materials",
     "construction", "finance", "agri", "digital", "consumer"].map((id) => groups.find((group) => group.id === id));
   const labels = { BK0482: "零售百货", BK1270: "专业连锁", BK1040: "中药", BK0475: "银行" };
@@ -74,6 +78,8 @@
   function forBoard(board) {
     if (board.kind === "industry") return byIndustry.get(board.code) || fallback;
     if (marketTheme.test(board.name)) return fallback;
+    const override = themeOverrides[board.code];
+    if (override) return groups.find((group) => group.id === override);
     return groups.find((group) => group.featured?.includes(board.code)) ||
       themePriority.find((group) => group.themes.test(board.name)) || fallback;
   }
