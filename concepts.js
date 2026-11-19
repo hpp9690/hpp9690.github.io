@@ -6,6 +6,9 @@
   const money = (value) => value >= 1e8 ? `${(value / 1e8).toFixed(2)}亿` : `${(value / 1e4).toFixed(0)}万`;
   const pct = (value) => Number.isFinite(value) ? `${value > 0 ? "+" : ""}${value.toFixed(2)}%` : "—";
   const mainBoard = (code) => /^(000|001|002|003|600|601|603|605)/.test(code);
+  const classification = window.QuantBoardGroups;
+  const categories = classification.groups;
+  const boardListLimit = 6;
   const shell = document.createElement("section");
   shell.id = "concept";
   shell.dataset.module = "concept";
@@ -17,7 +20,20 @@
       <input id="conceptQuery" type="search" autocomplete="off" placeholder="搜索板块，如机器人、PCB" aria-label="搜索行业或概念">
       <button type="submit">搜索</button>
     </form>
-    <section id="boardOverview" aria-label="板块涨跌排行"></section>
+    <div id="boardCategoryHome" class="board-category-home">
+      <div class="board-category-grid" aria-label="板块大类"></div>
+      <details id="boardRanking" class="market-panel-disclosure">
+        <summary>板块涨跌排行</summary>
+        <section id="boardOverview" aria-label="板块涨跌排行"></section>
+      </details>
+    </div>
+    <div id="boardCategoryDetail" class="board-category-detail" hidden>
+      <div class="board-category-header">
+        <button type="button" id="boardCategoryBack">‹ 全部大类</button>
+        <h3 id="boardCategoryTitle" tabindex="-1"></h3><p id="boardCategoryDescription"></p>
+      </div>
+      <div class="board-category-tabs board-overview-switch" role="group" aria-label="大类内筛选"></div>
+    </div>
     <p id="conceptHealth" class="board-catalogue-status" hidden></p>
     <div id="conceptMatches" class="concept-matches" hidden></div>
     <div id="conceptResult" class="concept-result" hidden>
@@ -40,7 +56,8 @@
   $(".concept-filters", shell).insertAdjacentHTML("beforeend", `<button type="button" id="conceptReset">重置筛选</button>`);
   $("#conceptMatches").setAttribute("aria-live", "polite");
   $("#conceptHealth").setAttribute("role", "status");
-  let boards = [], selected = null, members = [], filterLimit = 40, queryLimit = 12, catalogueAt = 0, selectionToken = 0, searchOpen = true, browseOpen = false, directoryReady = false;
+  let boards = [], selected = null, members = [], filterLimit = 40, queryLimit = boardListLimit, catalogueAt = 0, selectionToken = 0, searchOpen = true, directoryReady = false;
+  let category = null, categoryKind = "industry";
   let recentCodes = [];
   try { recentCodes = JSON.parse(localStorage.getItem("quantLens.conceptRecent.v1") || "[]").filter((x) => /^BK\d+$/.test(x)).slice(0, 5); } catch {}
   try { const cached = JSON.parse(localStorage.getItem(cacheKey) || "{}"); if (Date.now() - cached.at < 6 * 3600000 && Array.isArray(cached.boards)) { boards = cached.boards.map((board) => ({ ...board, kind: "concept" })); catalogueAt = cached.at; } } catch {}
@@ -60,33 +77,77 @@
   const memberPage = (code, page) => request({ pn: String(page), pz: "100", fid: "f12", fs: `b:${code}`, fields: "f2,f3,f6,f8,f10,f12,f14,f20,f21,f124" });
   const kindLabel = (board) => board.kind === "industry" ? "行业" : "概念";
   const recentRank = (code) => recentCodes.includes(code) ? recentCodes.indexOf(code) : recentCodes.length;
-  const matchesQuery = (query) => boards.filter((board) => query
-    ? compact(board.name).includes(query) : board.kind === overview.kind()
-  ).sort((a, b) => (query ? Number(compact(b.name) === query) - Number(compact(a.name) === query)
-    : recentRank(a.code) - recentRank(b.code)) || a.name.localeCompare(b.name, "zh-CN"));
+  const categoryTerms = (group) => [group.label, ...group.aliases.split(" ")].map(compact);
+  const matchesCategory = (query) => categories.filter((group) => categoryTerms(group).some((term) => term.includes(query)));
+  const searchName = (board) => compact(classification.name(board));
+  const searchRank = (board, query, raw) => {
+    if (board.name.toLowerCase() === raw.trim().toLowerCase()) return 0;
+    if ([searchName(board), ...classification.aliases(board).split(" ").map(compact)].includes(query)) return 1;
+    return 2;
+  };
+  const matchesQuery = (query, raw) => boards.filter((board) => `${board.name} ${classification.name(board)} ${classification.aliases(board)}`
+    .split(" ").some((term) => compact(term).includes(query))).sort((a, b) =>
+    searchRank(a, query, raw) - searchRank(b, query, raw) || Number(b.kind === "industry") - Number(a.kind === "industry") ||
+    a.name.localeCompare(b.name, "zh-CN"));
+  const categoryButton = (group) => `<button type="button" class="board-category-card" data-category="${group.id}"><strong>${group.label}</strong><span>${group.preview}</span></button>`;
+  const categoryBoards = (group) => boards.filter((board) => classification.forBoard(board) === group);
+  const categoryKinds = [{ id: "industry", label: "行业" }, { id: "concept", label: "相关概念" }];
+  $(".board-category-grid", shell).innerHTML = categories.map(categoryButton).join("");
   const renderMatches = () => {
     const raw = $("#conceptQuery").value;
     const query = compact(raw);
-    const showing = searchOpen && (Boolean(raw.trim()) || browseOpen);
+    const detail = searchOpen && category && !query;
+    const showing = searchOpen && Boolean(query || category);
     const list = $("#conceptMatches"), status = $("#conceptHealth");
-    $("#boardOverview").hidden = !searchOpen || Boolean(raw.trim());
+    $("#boardCategoryHome").hidden = !searchOpen || Boolean(query || category);
+    $("#boardCategoryDetail").hidden = !detail;
     $("#conceptClear").hidden = !raw;
     list.hidden = status.hidden = !showing;
-    overview.setBrowse(browseOpen);
     if (!showing) return;
-    const matches = matchesQuery(query);
-    status.textContent = matches.length ? `${query ? "搜索结果" : kindLabel({ kind: overview.kind() }) + "目录"} · ${matches.length} 个板块` : "";
-    list.innerHTML = matches.slice(0, queryLimit).map((board) => {
+    const scoped = detail ? categoryBoards(category) : [];
+    const market = detail && category.id === "market";
+    const typeOf = market ? classification.marketSection : (board) => board.kind;
+    if (detail) {
+      $("#boardCategoryTitle").textContent = category.label;
+      $("#boardCategoryDescription").textContent = category.preview;
+      const tabs = $(".board-category-tabs", shell);
+      const counts = new Map();
+      for (const board of scoped) {
+        const kind = typeOf(board);
+        counts.set(kind, (counts.get(kind) || 0) + 1);
+      }
+      if (!counts.get(categoryKind) && counts.size) categoryKind = counts.keys().next().value;
+      const active = tabs.contains(document.activeElement) ? document.activeElement.dataset.categoryKind : "";
+      const markup = (market ? classification.marketSections : categoryKinds).filter((kind) => counts.has(kind.id))
+        .map((kind) => `<button type="button" data-category-kind="${kind.id}" aria-pressed="${kind.id === categoryKind}">${kind.label} ${counts.get(kind.id)}</button>`).join("");
+      tabs.innerHTML = markup;
+      tabs.hidden = !markup;
+      if (active) tabs.querySelector(`[data-category-kind="${active}"]`)?.focus({ preventScroll: true });
+    }
+    const priorityCodes = detail ? (categoryKind === "industry" ? category.industries.split(" ").map((code) => `BK${code}`)
+      : category.featured || []) : [];
+    const priority = (code) => priorityCodes.includes(code) ? priorityCodes.indexOf(code) : priorityCodes.length;
+    const matches = query ? matchesQuery(query, raw) : scoped.filter((board) => typeOf(board) === categoryKind)
+      .sort((a, b) => priority(a.code) - priority(b.code) || recentRank(a.code) - recentRank(b.code) || a.name.localeCompare(b.name, "zh-CN"));
+    const matchingGroups = query ? matchesCategory(query).map(categoryButton).join("") : "";
+    status.textContent = query && matches.length ? `细分板块 · ${matches.length} 个` : "";
+    status.hidden = !status.textContent;
+    const focused = list.contains(document.activeElement) ? document.activeElement.dataset : {};
+    const boardCards = matches.slice(0, queryLimit).map((board) => {
       const quote = overview.quote(board);
-      return `<button type="button" data-board="${safe(board.code)}"><b>${safe(board.name)} <small>${kindLabel(board)}</small></b>
+      const label = classification.name(board);
+      const parent = query ? ` · ${classification.forBoard(board).label}` : "";
+      return `<button type="button" data-board="${safe(board.code)}" title="${safe(board.name)}">
+        <b>${safe(label)} <small>${kindLabel(board)}${safe(parent)}</small></b>
         <span class="${quote ? quote.pct >= 0 ? "up" : "down" : "muted"}">${quote ? pct(quote.pct) : "成分股 ›"}</span></button>`;
-    }).join("") + (matches.length > queryLimit ? `<button type="button" data-more-boards>继续查看 · ${matches.length - queryLimit} 个</button>` : "")
-      || `<div class="concept-empty">${boards.length ? "没有匹配的板块" : directoryReady ? "板块目录暂不可用" : "正在读取板块目录"}</div>`;
+    }).join("");
+    list.innerHTML = matchingGroups + boardCards + (matches.length > queryLimit ? `<button type="button" data-more-boards>继续查看 · ${matches.length - queryLimit} 个</button>` : "")
+      || `<div class="concept-empty">${boards.length ? "暂无匹配的板块" : directoryReady ? "板块目录暂不可用" : "正在读取板块目录"}</div>`;
+    if (focused.board) list.querySelector(`[data-board="${focused.board}"]`)?.focus({ preventScroll: true });
+    if (focused.category) list.querySelector(`[data-category="${focused.category}"]`)?.focus({ preventScroll: true });
   };
   const overview = window.QuantBoardOverview.mount($("#boardOverview"), {
-    onSelect: (board) => selectBoard(board.code, board),
-    onType: () => { queryLimit = 12; renderMatches(); },
-    onBrowse: () => { browseOpen = !browseOpen; queryLimit = 12; renderMatches(); }
+    onSelect: (board) => selectBoard(board.code, board)
   });
   const mergeBoards = (entries) => {
     const merged = new Map(boards.map((board) => [board.code, board]));
@@ -180,14 +241,16 @@
   const selectBoard = async (code, suppliedBoard) => {
     const board = suppliedBoard || boards.find((x) => x.code === code); if (!board) return;
     const token = ++selectionToken;
-    selected = board; members = []; filterLimit = 40; searchOpen = false; browseOpen = false;
+    selected = board; members = []; filterLimit = 40; searchOpen = false;
     $("#conceptReset").click();
     if (board.kind !== "industry") {
       recentCodes = [code, ...recentCodes.filter((x) => x !== code)].slice(0, 5);
       try { localStorage.setItem("quantLens.conceptRecent.v1", JSON.stringify(recentCodes)); } catch {}
     }
-    $("#conceptQuery").value = board.name;
-    $("#conceptResult").hidden = false; $("#conceptBoardName").textContent = board.name;
+    const name = classification.name(board);
+    $("#conceptQuery").value = name;
+    $("#conceptChange").textContent = category ? `返回${category.label}` : "返回总览";
+    $("#conceptResult").hidden = false; $("#conceptBoardName").textContent = name;
     const quote = Number.isFinite(board.pct) ? board : overview.quote(board);
     const showMove = (value, at) => {
       const move = $("#conceptBoardMove");
@@ -233,20 +296,39 @@
     finally { if (token === selectionToken) $("#conceptResult").removeAttribute("aria-busy"); }
   };
   const revealSearch = (clear = false) => {
-    searchOpen = true; queryLimit = 12;
+    searchOpen = true; queryLimit = boardListLimit;
     if (clear) $("#conceptQuery").value = "";
     $("#conceptResult").hidden = true;
     renderMatches();
   };
+  const openCategory = (id) => {
+    const group = categories.find((entry) => entry.id === id);
+    if (!group) return;
+    selectionToken++;
+    selected = null;
+    if (group.direct) {
+      const board = boards.find((entry) => entry.code === group.direct) ||
+        { code: group.direct, name: group.label, kind: "industry" };
+      category = null;
+      selectBoard(board.code, board);
+      return;
+    }
+    category = group;
+    categoryKind = group.id === "market" ? "indices" : "industry";
+    revealSearch(true);
+    $("#boardCategoryTitle").focus({ preventScroll: true });
+  };
   document.addEventListener("quant:open-board", (event) => {
     const board = event.detail;
     if (!/^BK\d+$/.test(board?.code || "") || typeof board.name !== "string") return;
+    category = null;
     document.dispatchEvent(new CustomEvent("quant:open-view", { detail: { id: "concept" } }));
     selectBoard(board.code, board);
   });
   document.addEventListener("quant:open-concept", async (event) => {
     const name = event.detail?.name?.trim();
     if (!name) return;
+    category = null;
     const findBoard = () => boards.find((board) => board.kind === "concept" && board.name === name);
     document.dispatchEvent(new CustomEvent("quant:open-view", { detail: { id: "concept" } }));
     const board = findBoard();
@@ -269,11 +351,14 @@
     if ($("#conceptQuery").value.trim()) loadBoards();
   });
   $("#conceptQuery").addEventListener("keydown", (event) => {
-    if (event.key === "ArrowDown") { const first = $("#conceptMatches [data-board]"); if (first) { event.preventDefault(); first.focus(); } }
-    if (event.key === "Escape" && selected) { searchOpen = false; $("#conceptQuery").value = selected.name; $("#conceptResult").hidden = false; renderMatches(); $("#conceptBoardName").focus(); }
+    if (event.key === "ArrowDown" && !$("#conceptMatches").hidden) {
+      const first = $("#conceptMatches [data-category], #conceptMatches [data-board]");
+      if (first) { event.preventDefault(); first.focus(); }
+    }
+    if (event.key === "Escape" && selected) { searchOpen = false; $("#conceptQuery").value = classification.name(selected); $("#conceptResult").hidden = false; renderMatches(); $("#conceptBoardName").focus(); }
   });
   $("#conceptMatches").addEventListener("keydown", (event) => {
-    const choices = [...$("#conceptMatches").querySelectorAll("[data-board]")], index = choices.indexOf(document.activeElement);
+    const choices = [...$("#conceptMatches").querySelectorAll("[data-category],[data-board]")], index = choices.indexOf(document.activeElement);
     if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); (choices[index + (event.key === "ArrowDown" ? 1 : -1)] || choices[event.key === "ArrowDown" ? 0 : choices.length - 1])?.focus(); }
     if (event.key === "Escape") { event.preventDefault(); $("#conceptQuery").focus(); }
   });
@@ -281,8 +366,14 @@
     event.preventDefault();
     const value = $("#conceptQuery").value, query = compact(value);
     if (!query) { renderMatches(); return; }
+    const group = categories.find((entry) => categoryTerms(entry).includes(query));
+    if (group) { openCategory(group.id); return; }
     await directoryTask;
-    const match = matchesQuery(query)[0];
+    let match = matchesQuery(query, value)[0];
+    if (!match) {
+      await loadBoards();
+      match = matchesQuery(query, value)[0];
+    }
     if ($("#conceptQuery").value !== value) return;
     if (match) selectBoard(match.code);
     else renderMatches();
@@ -292,7 +383,14 @@
     selectionToken++;
     selected = null;
     revealSearch(true);
-    $("#conceptQuery").focus({ preventScroll: true });
+    if (category) $("#boardCategoryTitle").focus({ preventScroll: true });
+    else $("#conceptQuery").focus({ preventScroll: true });
+  });
+  $("#boardCategoryBack").addEventListener("click", () => {
+    const previous = category;
+    category = null;
+    revealSearch(true);
+    if (previous) $(`#boardCategoryHome [data-category="${previous.id}"]`)?.focus({ preventScroll: true });
   });
   $("#conceptReset").addEventListener("click", () => {
     $("#conceptMarket").value = "all"; $("#conceptGain").value = "-100"; $("#conceptAmount").value = "0"; $("#conceptSort").value = "leader";
@@ -300,11 +398,21 @@
     filterLimit = 40; renderMembers();
   });
   shell.addEventListener("click", (event) => {
+    const group = event.target.closest("[data-category]");
+    if (group) { openCategory(group.dataset.category); return; }
+    const tab = event.target.closest("[data-category-kind]");
+    if (tab) {
+      categoryKind = tab.dataset.categoryKind;
+      queryLimit = boardListLimit;
+      renderMatches();
+      if (categoryKind !== "industry") loadBoards();
+      return;
+    }
     const sort = event.target.closest("[data-concept-sort]"); if (sort) { $("#conceptSort").value = sort.dataset.conceptSort; shell.querySelectorAll("[data-concept-sort]").forEach((x) => { const active = x === sort; x.classList.toggle("active", active); x.setAttribute("aria-pressed", String(active)); }); filterLimit = 40; renderMembers(); return; }
     const board = event.target.closest("[data-board]"); if (board) { selectBoard(board.dataset.board); return; }
     if (event.target.closest("[data-more-boards]")) {
       const firstNew = queryLimit;
-      queryLimit += 24;
+      queryLimit += 12;
       renderMatches();
       $("#conceptMatches").querySelectorAll("[data-board]")[firstNew]?.focus();
       return;
@@ -315,7 +423,7 @@
   ["conceptMarket", "conceptGain", "conceptAmount", "conceptSort"].forEach((id) => $("#" + id).addEventListener("change", () => { filterLimit = 40; renderMembers(); }));
   $("#conceptMore").addEventListener("click", () => { filterLimit += 40; renderMembers(); });
   document.addEventListener("quant:watchlist-changed", renderMembers);
-  document.addEventListener("quant:board-quotes-snapshot", (event) => overview.accept(event.detail));
+  document.addEventListener("quant:board-quotes-snapshot", (event) => { overview.accept(event.detail); renderMatches(); });
   document.addEventListener("quant:view-changed", (event) => { if (event.detail?.id === "concept") overview.refresh(); });
   document.addEventListener("quant:refresh-market", () => { if (!shell.hidden) overview.refresh(true); });
   const directoryTask = window.QuantBoards.directory().then(({ boards: entries }) => {

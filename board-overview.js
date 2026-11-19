@@ -50,7 +50,7 @@
     } catch { return {}; }
   }
 
-  function mount(host, { onSelect, onBrowse, onType }) {
+  function mount(host, { onSelect }) {
     const stored = cache();
     let kind = "industry", phase = "waiting", lastSnapshot;
     host.className = "board-overview";
@@ -61,12 +61,10 @@
           <button type="button" data-board-kind="industry" aria-pressed="true">行业</button>
           <button type="button" data-board-kind="concept" aria-pressed="false">概念</button>
         </div>
-        <div class="board-overview-actions"><button type="button" id="boardBrowseAll" aria-controls="conceptMatches" aria-expanded="false">浏览目录</button></div>
       </div>
       <div class="board-overview-grid" id="boardOverviewChart" aria-label="板块涨跌排行"></div>`;
     const grid = host.querySelector("#boardOverviewChart");
     const status = host.querySelector("#boardOverviewStatus");
-    const browse = host.querySelector("#boardBrowseAll");
 
     function makeColumn(label, rows, scale, empty) {
       const column = document.createElement("section");
@@ -142,9 +140,7 @@
         kind = tab.dataset.boardKind;
         host.querySelectorAll("[data-board-kind]").forEach((button) => button.setAttribute("aria-pressed", String(button === tab)));
         render();
-        onType();
       }
-      if (event.target.closest("#boardBrowseAll")) onBrowse();
       const row = event.target.closest("[data-chart-board]");
       const board = row && stored[kind]?.records.find((record) => record.code === row.dataset.chartBoard);
       if (board) onSelect(board);
@@ -153,11 +149,6 @@
 
     return {
       accept,
-      kind: () => kind,
-      setBrowse(open) {
-        browse.setAttribute("aria-expanded", String(open));
-        browse.textContent = open ? "收起目录" : "浏览目录";
-      },
       quote(board) {
         const group = stored[board.kind];
         return group && Date.now() - group.latest < cacheAge ? group.records.find((row) => row.code === board.code) : null;
