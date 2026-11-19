@@ -3,17 +3,17 @@
   const cards = [...document.querySelectorAll(".card")];
   const findCard = (title) => cards.find((card) => card.querySelector("h2")?.textContent.includes(title));
   const sections = [
-    { id: "opportunity", label: "机会", primary: true, el: null },
-    { id: "anomaly", label: "异动", primary: true, el: null },
-    { id: "concept", label: "板块", primary: true, el: null },
-    { id: "auction", label: "竞价", primary: true, el: $(".auction") },
-    { id: "lookup", label: "查个股", primary: true, el: $(".top-lookup") },
-    { id: "heatmap", label: "市场热力图", el: null },
-    { id: "limitup", label: "涨停雷达", el: $(".limitup") },
-    { id: "review", label: "信号复盘", el: null },
-    { id: "watchlist", label: "候选扫描", el: findCard("候选扫描") },
-    { id: "notes", label: "研究笔记", el: null },
-    { id: "guide", label: "评分逻辑", el: $(".guide") }
+    { id: "opportunity", label: "机会", title: "机会雷达", icon: "◉", primary: true, el: null },
+    { id: "anomaly", label: "异动", title: "异动捕捉", icon: "ϟ", primary: true, el: null },
+    { id: "concept", label: "板块", title: "板块总览", icon: "▦", primary: true, el: null },
+    { id: "auction", label: "竞价", title: "集合竞价", icon: "◷", primary: true, el: $(".auction") },
+    { id: "lookup", label: "查个股", title: "个股查询", icon: "⌕", primary: true, el: $(".top-lookup") },
+    { id: "heatmap", label: "市场热力图", icon: "▤", el: null },
+    { id: "limitup", label: "涨停雷达", icon: "↗", el: $(".limitup") },
+    { id: "review", label: "信号复盘", icon: "↶", el: null },
+    { id: "watchlist", label: "候选扫描", icon: "◎", el: findCard("候选扫描") },
+    { id: "notes", label: "研究笔记", icon: "▱", el: null },
+    { id: "guide", label: "评分逻辑", icon: "≡", el: $(".guide") }
   ];
 
   sections.forEach(({ id, el }) => { if (el) { el.id = id; el.dataset.module = id; } });
@@ -48,9 +48,16 @@
       <button type="button" id="workspaceMore" aria-expanded="false" aria-controls="workspaceMoreItems">更多 <span aria-hidden="true">⌄</span></button>
       <div id="workspaceMoreItems" class="workspace-more-items" hidden>${sections.filter((item) => !item.primary).map(navButton).join("")}</div>
     </div>
-    <button type="button" id="workspaceFullscreen" hidden>全屏</button>
   </div>`;
   document.querySelector("header")?.after(nav);
+  const desktopNav = $("#terminalNav");
+  const desktopButton = ({ id, title, label, icon }) => `<button type="button" data-view-target="${id}" aria-controls="${id}">
+    <span class="terminal-nav-icon" aria-hidden="true">${icon}</span>${title || label}</button>`;
+  const desktopGroup = (title, items) => `<div class="terminal-nav-group">
+    <span class="terminal-nav-label">${title}</span>${items.map(desktopButton).join("")}</div>`;
+  const researchViews = new Set(["review", "watchlist", "notes", "guide"]);
+  desktopNav.innerHTML = desktopGroup("行情", sections.filter(({ id }) => !researchViews.has(id))) +
+    desktopGroup("研究", sections.filter(({ id }) => researchViews.has(id)));
 
   const validViews = new Set(sections.map((item) => item.id));
   const more = $("#workspaceMore", nav), moreItems = $("#workspaceMoreItems", nav);
@@ -69,19 +76,20 @@
     document.querySelectorAll("[data-module]").forEach((panel) => {
       panel.hidden = panel.dataset.module !== id;
     });
-    nav.querySelectorAll("[data-target]").forEach((button) => {
-      const active = button.dataset.target === id;
+    document.querySelectorAll(".quick-nav [data-target], #terminalNav [data-view-target]").forEach((button) => {
+      const active = (button.dataset.target || button.dataset.viewTarget) === id;
       button.classList.toggle("active", active);
       if (active) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     });
     const current = sections.find((item) => item.id === id);
+    $("#terminalPageTitle").textContent = current.title || current.label;
     more.classList.toggle("active", !current.primary);
     more.setAttribute("aria-label", current.primary ? "更多功能" : `更多功能，当前为${current.label}`);
     setMoreOpen(false);
     if (remember && location.hash !== `#${id}`) history.pushState(null, "", `#${id}`);
     document.dispatchEvent(new CustomEvent("quant:view-changed", { detail: { id } }));
-    if (scroll) nav.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+    if (scroll) window.scrollTo({ top: 0, behavior: scrollBehavior() });
   };
   document.addEventListener("quant:open-view", (event) => activateView(event.detail?.id));
 
@@ -292,6 +300,28 @@
     if (id === "lookup") $("#stockSearch")?.focus({ preventScroll: true });
     else if (fromMore) more.focus({ preventScroll: true });
   });
+  desktopNav.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-view-target]");
+    if (!button) return;
+    const id = button.dataset.viewTarget;
+    activateView(id);
+    if (id === "lookup") $("#stockSearch")?.focus({ preventScroll: true });
+  });
+  $(".terminal-brand").addEventListener("click", (event) => {
+    event.preventDefault();
+    activateView("opportunity");
+  });
+  const terminalSearch = $("#terminalSearch");
+  $("#terminalSearchForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const value = terminalSearch.value.trim();
+    if (!value) { terminalSearch.focus(); return; }
+    const stockInput = $("#stockSearch");
+    activateView("lookup");
+    stockInput.value = value;
+    stockInput.focus({ preventScroll: true });
+    $("#lookupForm").requestSubmit();
+  });
 
   $("#refreshAll")?.addEventListener("click", () => {
     ["refresh", "auctionRefresh", "ztRefresh", "reviewRefresh"].forEach((id) => document.getElementById(id)?.click());
@@ -327,8 +357,7 @@
     const editing = document.activeElement?.matches("input, textarea, select, [contenteditable]");
     if (event.key === "/" && !editing && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
-      activateView("lookup");
-      $("#stockSearch")?.focus();
+      terminalSearch.focus();
     }
     if (event.key === "Escape" && !moreItems.hidden) {
       setMoreOpen(false);
@@ -340,7 +369,6 @@
   });
   const viewFromHash = () => location.hash.slice(1);
   activateView(validViews.has(viewFromHash()) ? viewFromHash() : "opportunity", { remember: false, scroll: false });
-  if (validViews.has(viewFromHash())) requestAnimationFrame(() => document.getElementById(viewFromHash())?.scrollIntoView({ block: "start" }));
   addEventListener("popstate", () => activateView(viewFromHash(), { remember: false }));
   addEventListener("hashchange", () => activateView(viewFromHash(), { remember: false }));
 })();

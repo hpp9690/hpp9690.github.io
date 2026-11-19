@@ -9,11 +9,20 @@
   const kinds = { industry: "行业", concept: "概念" };
   const direction = (value) => value > 0 ? "up" : value < 0 ? "down" : "flat";
   const percent = (value) => `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
+  const shortNumber = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
+
+  function money(value) {
+    if (value >= 1e8) return `${shortNumber.format(value / 1e8)}亿元`;
+    if (value >= 1e4) return `${shortNumber.format(value / 1e4)}万元`;
+    return `${shortNumber.format(value)}元`;
+  }
 
   function number(value) {
     return (typeof value === "number" || (typeof value === "string" && value.trim())) &&
       Number.isFinite(Number(value)) ? Number(value) : null;
   }
+
+  const validAmount = (value) => Number.isFinite(value) && value >= 0;
 
   function fromSnapshot(catalogue, rows) {
     const now = Date.now();
@@ -22,10 +31,11 @@
     for (const row of rows) {
       const board = byCode.get(row.f12);
       const pct = number(row.f3), at = (number(row.f124) || 0) * 1000;
-      if (!board || pct === null || !at || at > now + 5000 || now - at > cacheAge) continue;
+      const amount = number(row.f6);
+      if (!board || (pct === null && !validAmount(amount)) || !at || at > now + 5000 || now - at > cacheAge) continue;
       const group = groups[board.kind];
       if (at < (group.get(board.code)?.at || 0)) continue;
-      group.set(board.code, { ...board, pct, at });
+      group.set(board.code, { ...board, pct, amount: validAmount(amount) ? amount : null, at });
     }
     return Object.fromEntries(Object.entries(groups).map(([kind, group]) => {
       const latest = Math.max(0, ...[...group.values()].map((board) => board.at));
@@ -42,7 +52,7 @@
         const group = stored[kind];
         if (!Number.isFinite(group?.latest) || Date.now() - group.latest > cacheAge || group.latest > Date.now() ||
             !group.records?.length || !group.records.every((row) => row && row.kind === kind &&
-              /^BK\d+$/.test(row.code) && typeof row.name === "string" && Number.isFinite(row.pct) &&
+              /^BK\d+$/.test(row.code) && typeof row.name === "string" && (Number.isFinite(row.pct) || validAmount(row.amount)) &&
               Number.isFinite(row.at) && row.at <= group.latest)) delete stored[kind];
         else group.cached = true;
       }
@@ -52,7 +62,7 @@
 
   function mount(host, { onSelect }) {
     const stored = cache();
-    let kind = "industry", phase = "waiting", lastSnapshot;
+    let kind = "industry", metric = "pct", limit = 5, phase = "waiting", lastSnapshot;
     host.className = "board-overview";
     host.innerHTML = `
       <div class="board-overview-head"><span id="boardOverviewStatus" role="status"></span></div>
@@ -60,6 +70,10 @@
         <div class="board-overview-switch" role="group" aria-label="板块分类">
           <button type="button" data-board-kind="industry" aria-pressed="true">行业</button>
           <button type="button" data-board-kind="concept" aria-pressed="false">概念</button>
+        </div>
+        <div class="board-chart-params" role="group" aria-label="排行图表参数">
+          <label class="board-chart-param"><span>指标</span><select data-board-ranking-metric><option value="pct">涨跌幅</option><option value="amount">成交额</option></select></label>
+          <label class="board-chart-param"><span>显示</span><select data-board-ranking-limit><option value="5">前 5</option><option value="10">前 10</option></select></label>
         </div>
       </div>
       <div class="board-overview-grid" id="boardOverviewChart" aria-label="板块涨跌排行"></div>`;
@@ -74,16 +88,19 @@
       const list = document.createElement("div");
       list.className = "board-overview-rows";
       for (const row of rows) {
+        const value = row[metric];
+        const formatted = metric === "amount" ? money(value) : percent(value);
         const button = document.createElement("button");
         button.type = "button";
         button.className = "board-overview-row";
         button.dataset.chartBoard = row.code;
-        button.dataset.direction = direction(row.pct);
-        button.setAttribute("aria-label", `${row.name} ${percent(row.pct)}，查看成分股`);
+        button.dataset.direction = metric === "amount" ? "amount" : direction(value);
+        button.title = row.name;
+        button.setAttribute("aria-label", `${row.name} ${formatted}，查看成分股`);
         button.innerHTML = '<span class="board-overview-name"></span><span class="board-overview-track" aria-hidden="true"><span class="board-overview-fill"></span></span><strong class="board-overview-value"></strong>';
         button.querySelector(".board-overview-name").textContent = row.name;
-        button.querySelector(".board-overview-value").textContent = percent(row.pct);
-        button.style.setProperty("--board-bar-width", `${100 * Math.abs(row.pct) / scale}%`);
+        button.querySelector(".board-overview-value").textContent = formatted;
+        button.style.setProperty("--board-bar-width", `${100 * Math.abs(value) / scale}%`);
         list.append(button);
       }
       if (!rows.length) {
@@ -98,22 +115,29 @@
 
     function render() {
       const group = stored[kind];
+      grid.dataset.metric = metric;
+      grid.setAttribute("aria-label", metric === "amount" ? "板块成交额排行" : "板块涨跌排行");
       if (group && Date.now() - group.latest < cacheAge) {
-        const rows = [...group.records].sort((a, b) => b.pct - a.pct || a.code.localeCompare(b.code));
+        const rows = group.records.filter((row) => Number.isFinite(row[metric])).sort((a, b) =>
+          b[metric] - a[metric] || a.code.localeCompare(b.code));
         const quotes = day.format(group.latest) === day.format(Date.now()) ? "报价" : "历史报价";
         status.textContent = `${quotes} ${stamp.format(group.latest)} · ${kinds[kind]} ${rows.length}/${group.total}${group.cached ? " · 缓存" : ""}`;
-        const scale = Math.max(...rows.map((row) => Math.abs(row.pct)), .01);
+        const scale = Math.max(...rows.map((row) => Math.abs(row[metric])), .01);
         const focus = grid.contains(document.activeElement) ? document.activeElement.dataset.chartBoard : "";
-        grid.replaceChildren(
-          makeColumn("涨幅领先", rows.filter((row) => row.pct > 0).slice(0, 5), scale, "暂无上涨板块"),
-          makeColumn("跌幅领先", rows.filter((row) => row.pct < 0).slice(-5).reverse(), scale, "暂无下跌板块")
-        );
+        if (metric === "amount") {
+          grid.replaceChildren(makeColumn("成交额领先", rows.slice(0, limit), scale, "暂无板块成交额报价"));
+        } else {
+          grid.replaceChildren(
+            makeColumn("涨幅领先", rows.filter((row) => row.pct > 0).slice(0, limit), scale, "暂无上涨板块"),
+            makeColumn("跌幅领先", rows.filter((row) => row.pct < 0).slice(-limit).reverse(), scale, "暂无下跌板块")
+          );
+        }
         if (focus) grid.querySelector(`[data-chart-board="${focus}"]`)?.focus({ preventScroll: true });
       } else {
         status.textContent = phase === "error" ? "板块报价暂不可用" : "正在读取板块报价";
         const empty = document.createElement("div");
         empty.className = "board-overview-empty";
-        empty.textContent = phase === "error" ? "可以搜索板块或从目录查看成分股。" : "收到报价后显示板块涨跌排行。";
+        empty.textContent = phase === "error" ? "可以搜索板块或从目录查看成分股。" : "正在读取板块排行榜。";
         grid.replaceChildren(empty);
       }
     }
@@ -144,6 +168,14 @@
       const row = event.target.closest("[data-chart-board]");
       const board = row && stored[kind]?.records.find((record) => record.code === row.dataset.chartBoard);
       if (board) onSelect(board);
+    });
+    host.querySelector("[data-board-ranking-metric]").addEventListener("change", (event) => {
+      metric = event.currentTarget.value;
+      render();
+    });
+    host.querySelector("[data-board-ranking-limit]").addEventListener("change", (event) => {
+      limit = Number(event.currentTarget.value);
+      render();
     });
     render();
 
@@ -176,25 +208,46 @@
   }
 
   const chartObservers = new WeakMap();
+  const trendPreferences = new WeakMap();
+  const tradingSessions = {
+    all: { label: "全天", start: 570, end: 900, labels: ["09:30", "11:30 / 13:00", "15:00"] },
+    morning: { label: "上午", start: 570, end: 690, labels: ["09:30", "11:30"] },
+    afternoon: { label: "下午", start: 780, end: 900, labels: ["13:00", "15:00"] }
+  };
   const tradingMinute = (minute) => minute <= 690 ? minute - 570 : minute - 660;
   const clockLabel = (minute) => `${Math.floor(minute / 60)}:${String(minute % 60).padStart(2, "0")}`;
 
   function showTrend(host, trend) {
     chartObservers.get(host)?.disconnect();
     chartObservers.delete(host);
-    host.hidden = !trend || !(trend.previousClose > 0) || trend.points.length < 2;
+    host.hidden = !trend?.points?.length;
     host.replaceChildren();
     if (host.hidden) return;
-    const { date, previousClose, points } = trend;
-    const values = points.map(({ price }) => (price / previousClose - 1) * 100);
-    const last = values.at(-1), ceiling = Math.max(.1, ...values.map(Math.abs));
-    host.innerHTML = `<figcaption><b>板块分时</b><strong data-direction="${direction(last)}">${percent(last)}</strong></figcaption>
-      <canvas></canvas><div class="board-trend-axis" aria-hidden="true"><span>09:30</span><span>11:30 / 13:00</span><span>15:00</span></div>
-      <small>${date} ${clockLabel(points.at(-1).minute)} · 相对昨收</small>`;
+    const { date, previousClose } = trend;
+    const hasPreviousClose = Number.isFinite(previousClose) && previousClose > 0;
+    const preference = trendPreferences.get(host) || { session: "all", metric: "pct" };
+    trendPreferences.set(host, preference);
+    host.innerHTML = `<figcaption><b>板块分时</b><strong class="board-trend-value"></strong></figcaption>
+      <div class="board-chart-params" role="group" aria-label="分时图表参数">
+        <label class="board-chart-param"><span>时段</span><select data-trend-session><option value="all">全天</option><option value="morning">上午</option><option value="afternoon">下午</option></select></label>
+        <label class="board-chart-param"><span>指标</span><select data-trend-metric><option value="pct">涨跌幅</option><option value="price">指数点位</option></select></label>
+      </div>
+      <canvas role="img"></canvas><div class="board-trend-axis" aria-hidden="true"></div>
+      <p class="board-trend-empty" role="status" hidden></p><small class="board-trend-meta"></small>`;
     const canvas = host.querySelector("canvas");
-    canvas.setAttribute("role", "img");
-    canvas.setAttribute("aria-label", `${date} 板块相对昨收，最低 ${percent(Math.min(...values))}，最高 ${percent(Math.max(...values))}，最新 ${percent(last)}`);
+    const sessionSelect = host.querySelector("[data-trend-session]");
+    const metricSelect = host.querySelector("[data-trend-metric]");
+    const value = host.querySelector(".board-trend-value");
+    const axis = host.querySelector(".board-trend-axis");
+    const meta = host.querySelector(".board-trend-meta");
+    const empty = host.querySelector(".board-trend-empty");
+    sessionSelect.value = preference.session;
+    metricSelect.querySelector('[value="pct"]').disabled = !hasPreviousClose;
+    metricSelect.value = hasPreviousClose ? preference.metric : "price";
+    let series;
+
     const draw = () => {
+      if (!series) return;
       const width = canvas.clientWidth, height = canvas.clientHeight;
       if (!width || !height) return;
       const scale = Math.min(2, window.devicePixelRatio || 1);
@@ -204,27 +257,70 @@
       if (!ctx) return;
       const colors = getComputedStyle(host);
       ctx.scale(scale, scale);
-      const pad = 5, middle = height / 2;
-      const x = (minute) => pad + tradingMinute(minute) * (width - pad * 2) / 240;
-      const y = (value) => middle - value / ceiling * (middle - pad);
-      ctx.strokeStyle = colors.getPropertyValue("--line");
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
-      ctx.moveTo(pad, middle);
-      ctx.lineTo(width - pad, middle);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.strokeStyle = colors.getPropertyValue("--accent-strong");
+      const { start, end, low, high, baseline, points, values } = series;
+      const pad = 5, span = tradingMinute(end) - tradingMinute(start);
+      const x = (minute) => pad + (tradingMinute(minute) - tradingMinute(start)) * (width - pad * 2) / span;
+      const y = (point) => pad + (high - point) * (height - pad * 2) / (high - low);
+      if (baseline !== null && baseline >= low && baseline <= high) {
+        ctx.strokeStyle = colors.getPropertyValue("--line");
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(pad, y(baseline));
+        ctx.lineTo(width - pad, y(baseline));
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      const accent = colors.getPropertyValue("--accent-strong");
+      ctx.strokeStyle = accent;
       ctx.lineWidth = 1.6;
       ctx.lineJoin = "round";
       ctx.beginPath();
       points.forEach(({ minute }, i) => {
-        if (i) ctx.lineTo(x(minute), y(values[i]));
+        if (i && !(points[i - 1].minute <= 690 && minute >= 780)) ctx.lineTo(x(minute), y(values[i]));
         else ctx.moveTo(x(minute), y(values[i]));
       });
       ctx.stroke();
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.arc(x(points.at(-1).minute), y(values.at(-1)), 2, 0, 2 * Math.PI);
+      ctx.fill();
     };
-    draw();
+
+    function update() {
+      const session = tradingSessions[sessionSelect.value];
+      const { start, end, labels } = session;
+      const points = trend.points.filter(({ minute }) => minute >= start && minute <= end);
+      const noData = !points.length;
+      canvas.hidden = axis.hidden = value.hidden = noData;
+      empty.hidden = !noData;
+      series = null;
+      if (noData) {
+        empty.textContent = `暂无${session.label}分时数据`;
+        meta.textContent = date;
+        return;
+      }
+
+      const usePercent = metricSelect.value === "pct";
+      const metricLabel = usePercent ? "相对昨收" : "指数点位";
+      const format = usePercent ? percent : (point) => `${shortNumber.format(point)} 点`;
+      const values = points.map(({ price }) => usePercent ? (price / previousClose - 1) * 100 : price);
+      const min = Math.min(...values), max = Math.max(...values), last = values.at(-1);
+      const ceiling = Math.max(.1, Math.abs(min), Math.abs(max));
+      const padding = Math.max(.01, (max - min) * .06);
+      series = { start, end, points, values, low: usePercent ? -ceiling : min - padding,
+        high: usePercent ? ceiling : max + padding, baseline: usePercent ? 0 : previousClose };
+
+      value.textContent = format(last);
+      value.dataset.direction = usePercent ? direction(last) : "flat";
+      axis.innerHTML = labels.map((label) => `<span>${label}</span>`).join("");
+      meta.textContent = `${date} ${clockLabel(points.at(-1).minute)} · ${metricLabel}`;
+      canvas.setAttribute("aria-label", `${date} ${session.label} ${metricLabel}，最低 ${format(min)}，最高 ${format(max)}，最新 ${format(last)}`);
+      draw();
+    }
+
+    sessionSelect.addEventListener("change", () => { preference.session = sessionSelect.value; update(); });
+    metricSelect.addEventListener("change", () => { preference.metric = metricSelect.value; update(); });
+    update();
     if (typeof ResizeObserver !== "undefined") {
       const observer = new ResizeObserver(draw);
       observer.observe(canvas);

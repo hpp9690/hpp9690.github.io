@@ -1,0 +1,272 @@
+.terminal-market {
+  display: grid;
+  grid-template-columns: minmax(0, 1.9fr) minmax(250px, 1fr);
+  gap: 14px;
+  margin: 0 0 16px;
+}
+
+.terminal-market[hidden] { display: none; }
+
+.terminal-market-card {
+  min-width: 0;
+  padding: 15px 17px 13px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--surface);
+}
+
+.terminal-market-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.terminal-market-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.terminal-market-head p,
+.terminal-market-head > span {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.terminal-market-params,
+.board-chart-params {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 8px;
+}
+
+.terminal-market-params label,
+.board-chart-param {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.terminal-market-params select,
+.board-chart-param select {
+  min-height: 30px;
+  max-width: 100%;
+  padding: 3px 6px;
+  border-color: var(--line);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  font-size: 11px;
+}
+
+.terminal-market-plot {
+  --chart-height: 109px;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px;
+  align-items: start;
+  margin-top: 22px;
+}
+
+.terminal-market-ticks {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 23px;
+  height: calc(var(--chart-height) + 12px);
+  margin-top: -6px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.terminal-market-range {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  background: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 25%) top / 100% var(--chart-height) no-repeat;
+}
+
+.terminal-market-column {
+  --market-tone: #9aa59e;
+  min-width: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.terminal-market-column[data-tone="up"] { --market-tone: #af3345; }
+.terminal-market-column[data-tone="down"] { --market-tone: #268068; }
+
+.terminal-market-column-track {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: var(--chart-height);
+  border-bottom: 1px solid var(--line);
+}
+
+.terminal-market-column-track > span {
+  position: relative;
+  display: block;
+  width: clamp(12px, 66%, 44px);
+  height: var(--market-bar);
+  border-radius: 4px 4px 0 0;
+  background: var(--market-tone);
+}
+
+.terminal-market-column-track b {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.terminal-market-column small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.terminal-market-empty {
+  position: absolute;
+  inset: 35px 0 auto 25px;
+  width: fit-content;
+  margin: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.terminal-breadth-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  margin: 9px 0 10px;
+}
+
+.terminal-breadth-ring {
+  display: grid;
+  place-items: center;
+  width: 105px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--surface-subtle);
+}
+
+.terminal-breadth-ring.has-data {
+  background: conic-gradient(#af3345 0 var(--breadth-up), #9aa59e var(--breadth-up) var(--breadth-flat),
+    #268068 var(--breadth-flat) 100%);
+}
+
+.terminal-breadth-ring > div {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  width: 78%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.terminal-breadth-ring strong {
+  color: var(--text);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.22;
+}
+
+.terminal-breadth-ring span,
+.terminal-breadth-legend dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.terminal-breadth-legend {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+}
+
+.terminal-breadth-legend > div,
+.terminal-market-turnover {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.terminal-breadth-legend dt::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #9aa59e;
+  vertical-align: 1px;
+  content: "";
+}
+
+.terminal-breadth-legend [data-tone="up"] dt::before { background: #af3345; }
+.terminal-breadth-legend [data-tone="down"] dt::before { background: #268068; }
+
+.terminal-breadth-legend dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.terminal-market-turnover {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.terminal-market-turnover strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.board-overview-grid[data-metric="amount"] { grid-template-columns: minmax(0, 1fr); }
+.board-overview-row[data-direction="amount"] { --board-tone: var(--accent-strong); }
+.board-trend [hidden] { display: none; }
+.board-trend-empty { margin: 14px 0 7px; color: var(--muted); font-size: 12px; }
+
+@media (max-width: 720px) {
+  .terminal-market { grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 12px; }
+  .terminal-market-card { padding: 11px 10px 10px; }
+  .terminal-market-plot { --chart-height: 88px; }
+  .terminal-market-column small,
+  .terminal-market-column-track b { font-size: 9px; }
+  .terminal-breadth-body { margin-block: 6px; gap: 13px; }
+  .terminal-breadth-ring { width: 77px; }
+  .terminal-breadth-ring strong { font-size: 16px; }
+  .terminal-breadth-ring span { font-size: 9px; }
+}
+

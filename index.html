@@ -2,19 +2,32 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#ffffff"><meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f4f5f1"><meta name="color-scheme" content="light">
   <meta name="description" content="A股透明量化观察器：趋势、活跃度与风险评分">
   <title>量化观察器 · A股候选扫描</title><link rel="stylesheet" href="quant.css?v=stock-concepts1">
   <link rel="stylesheet" href="research.css?v=boards1">
   <link rel="stylesheet" href="workspace.css?v=1">
   <link rel="stylesheet" href="board-overview.css?v=groups1">
+  <link rel="stylesheet" href="terminal.css?v=1">
+  <link rel="stylesheet" href="terminal-opportunity.css?v=1">
+  <link rel="stylesheet" href="terminal-market.css?v=1">
 </head>
-<body>
-  <main class="wrap">
-    <header>
-      <h1>量化观察器</h1>
-      <div class="header-actions">
+<body class="terminal">
+  <aside class="terminal-sidebar">
+    <a class="terminal-brand" href="#opportunity"><span class="terminal-mark" aria-hidden="true"><i></i><i></i><i></i></span><strong>量化观察器</strong></a>
+    <nav id="terminalNav" aria-label="工作台导航"></nav>
+    <div class="terminal-sidebar-meta"><span class="terminal-status-dot" aria-hidden="true"></span>沪深京 A 股</div>
+  </aside>
+  <main class="wrap terminal-main">
+    <header class="terminal-header">
+      <div class="terminal-heading"><span class="terminal-brand-mini">量化观察器</span><h1 id="terminalPageTitle">机会雷达</h1></div>
+      <div class="terminal-header-actions header-actions">
+        <form id="terminalSearchForm" class="terminal-search" role="search" aria-label="快捷查询个股">
+          <input id="terminalSearch" type="search" autocomplete="off" enterkeyhint="search" placeholder="搜索股票名称或代码" aria-label="股票名称或代码">
+          <button type="submit">搜索</button>
+        </form>
         <button type="button" id="refreshAll">刷新行情</button>
+        <button type="button" id="workspaceFullscreen" hidden>全屏</button>
       </div>
     </header>
     <section class="card lookup top-lookup"><div class="lookup-row"><div><h2>个股查询</h2><p class="muted">行情、估值、资金流向和技术指标</p></div><form id="lookupForm" role="search" aria-label="个股查询"><input id="stockSearch" type="search" autocomplete="off" enterkeyhint="search" aria-label="股票名称或代码" aria-controls="suggestions" placeholder="股票名称或代码"><button type="submit">查询</button></form></div><div id="suggestions" class="suggestions" hidden></div><div id="stockDetail" class="detail-empty">输入股票名称或代码开始查询</div></section>
@@ -32,18 +45,19 @@
   <script src="technical.js?v=1"></script>
   <script src="lookup.js?v=research1"></script>
   <script src="continuation.js"></script>
-  <script src="ui.js?v=workspace1"></script>
+  <script src="ui.js?v=terminal1"></script>
   <script src="signal-review.js?v=1"></script>
   <script src="research-notes.js?v=workspace1"></script>
   <script src="board-data.js?v=overview1"></script>
-  <script src="board-overview.js?v=groups1"></script>
+  <script src="board-overview.js?v=terminal1"></script>
   <script src="anomaly.js?v=boards1"></script>
   <script src="board-anomaly.js?v=overview1"></script>
   <script src="heatmap.js?v=overview1"></script>
   <script src="opportunity-evidence.js?v=3"></script>
   <script src="opportunities.js?v=workspace1"></script>
+  <script src="terminal-market.js?v=1"></script>
   <script src="board-groups.js?v=2"></script>
-  <script src="concepts.js?v=groups1"></script>
+  <script src="concepts.js?v=terminal1"></script>
   <script src="market-scanner.js?v=research1"></script>
   <script src="auction.js?v=research1"></script>
   <script src="limitup-v2.js?v=3"></script>

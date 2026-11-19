@@ -15,8 +15,7 @@
   shell.className = "concept-panel";
   shell.hidden = document.body.dataset.view !== "concept";
   shell.setAttribute("aria-label", "板块");
-  shell.innerHTML = `<div class="concept-head"><h2>板块总览</h2></div>
-    <form id="conceptForm" class="concept-search">
+  shell.innerHTML = `<form id="conceptForm" class="concept-search">
       <input id="conceptQuery" type="search" autocomplete="off" placeholder="搜索板块，如机器人、PCB" aria-label="搜索行业或概念">
       <button type="submit">搜索</button>
     </form>
