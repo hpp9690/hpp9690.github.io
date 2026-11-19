@@ -15,7 +15,7 @@
       <div class="terminal-market-head">
         <div><h2>涨跌分布</h2><p id="marketChartStamp" role="status">等待读取行情</p></div>
         <div class="terminal-market-params">
-          <label>范围<select id="marketChartUniverse"><option value="all">全部 A 股</option><option value="main">沪深主板</option></select></label>
+          <label>范围<select id="marketChartUniverse"><option value="all">全部 A 股</option><option value="main">沪深主板</option><option value="industry">行业板块</option></select></label>
           <label>单位<select id="marketChartUnit"><option value="count">股数</option><option value="share">占比</option></select></label>
         </div>
       </div>
@@ -28,7 +28,7 @@
     <article class="terminal-market-card terminal-market-breadth">
       <div class="terminal-market-head"><h2>市场广度</h2><span id="marketBreadthScope">全部 A 股</span></div>
       <div class="terminal-breadth-body">
-        <div class="terminal-breadth-ring" aria-hidden="true"><div><strong id="marketBreadthTotal">—</strong><span>有效报价</span></div></div>
+        <div class="terminal-breadth-ring" aria-hidden="true"><div><strong id="marketBreadthTotal">—</strong><span id="marketBreadthLabel">有效报价</span></div></div>
         <dl class="terminal-breadth-legend"><div data-tone="up"><dt>上涨</dt><dd>—</dd></div>
           <div data-tone="flat"><dt>平盘</dt><dd>—</dd></div><div data-tone="down"><dt>下跌</dt><dd>—</dd></div></dl>
       </div>
@@ -41,7 +41,7 @@
   const axis = $(".terminal-market-ticks");
   const ring = $(".terminal-breadth-ring");
   const universe = $("#marketChartUniverse"), unit = $("#marketChartUnit");
-  let snapshot, health;
+  let stockSnapshot, industrySnapshot, health, scopeChosen = false;
 
   function band(value) {
     if (value <= -5) return 0;
@@ -61,6 +61,12 @@
   function render() {
     const useShare = unit.value === "share";
     const main = universe.value === "main";
+    const isIndustry = universe.value === "industry";
+    const snapshot = isIndustry ? industrySnapshot : stockSnapshot;
+    const noun = isIndustry ? "个板块" : "只";
+    unit.options[0].textContent = isIndustry ? "板块数" : "股数";
+    $("#marketBreadthLabel").textContent = isIndustry ? "有效板块" : "有效报价";
+    $(".terminal-market-turnover").hidden = isIndustry;
     const rows = (main ? snapshot?.main : snapshot?.all) || [];
     const count = rows.length;
     const bands = Array(7).fill(0);
@@ -79,7 +85,7 @@
     plot.innerHTML = rangeLabels.map((label, index) => {
       const tone = index < 3 ? "down" : index === 3 ? "flat" : "up";
       const value = count ? (useShare ? `${values[index].toFixed(1)}%` : number.format(bands[index])) : "—";
-      const description = `${label}，${count ? number.format(bands[index]) + " 只" + (useShare ? "，占 " + value : "") : "暂无报价"}`;
+      const description = `${label}，${count ? number.format(bands[index]) + " " + noun + (useShare ? "，占 " + value : "") : "暂无报价"}`;
       return `<div class="terminal-market-column" role="img" data-tone="${tone}" title="${description}" aria-label="${description}">
         <div class="terminal-market-column-track"><span style="--market-bar:${100 * values[index] / cap}%"><b>${value}</b></span></div><small>${label}</small>
       </div>`;
@@ -89,7 +95,7 @@
     ring.style.setProperty("--breadth-up", `${count ? 100 * up / count : 0}%`);
     ring.style.setProperty("--breadth-flat", `${count ? 100 * (up + flat) / count : 0}%`);
     ring.classList.toggle("has-data", Boolean(count));
-    $("#marketBreadthScope").textContent = main ? "沪深主板" : "全部 A 股";
+    $("#marketBreadthScope").textContent = isIndustry ? "行业板块" : main ? "沪深主板" : "全部 A 股";
     $("#marketBreadthTotal").textContent = count ? number.format(count) : "—";
     $("#marketBreadthAmount").textContent = count ? amount(traded) : "—";
     for (const [tone, total] of Object.entries({ up, flat, down })) {
@@ -97,33 +103,72 @@
     }
     const caption = $("#marketChartStamp");
     if (!snapshot) {
-      caption.textContent = health === "error" ? "市场行情暂不可用" : "等待读取行情";
+      caption.textContent = isIndustry ? "等待行业板块报价" : health === "error" ? "市场行情暂不可用" : "等待读取行情";
+      caption.title = "";
       return;
     }
     const historical = snapshot.date !== dayFormat.format(Date.now());
     const stamp = `${historical ? snapshot.date.slice(5) + " " : ""}${timeFormat.format(snapshot.at)}`;
     const origin = snapshot.source === "cache" ? "缓存 " : historical ? "历史 " : "";
     const coverage = snapshot.total && snapshot.scanned < snapshot.total ? ` · 覆盖 ${snapshot.scanned}/${snapshot.total}` : "";
-    caption.textContent = `${origin}报价 ${stamp} · ${count ? number.format(count) + " 只" : "当前范围暂无报价"}${coverage}`;
-    caption.title = snapshot.total ? `全市场扫描 ${snapshot.scanned}/${snapshot.total}${snapshot.missingPages ? `，缺 ${snapshot.missingPages} 页` : ""}` : "";
+    caption.textContent = `${origin}报价 ${stamp} · ${count ? number.format(count) + " " + noun : "当前范围暂无报价"}${coverage}`;
+    caption.title = snapshot.total ? `${isIndustry ? "行业板块" : "全市场扫描"} ${snapshot.scanned}/${snapshot.total}${snapshot.missingPages ? `，缺 ${snapshot.missingPages} 页` : ""}` : "";
   }
 
   document.addEventListener("quant:market-snapshot", ({ detail }) => {
     const at = detail?.quotedAt;
     if (detail?.partial !== false || !Array.isArray(detail.allStocks) || !Array.isArray(detail.stocks) ||
         !Number.isFinite(at) || at <= 0 || at - Date.now() > 5000 || Date.now() - at > 7 * 86400000 ||
-        (snapshot && at < snapshot.at)) return;
+        (stockSnapshot && at < stockSnapshot.at)) return;
     const date = dayFormat.format(at);
     const valid = (row) => Number.isFinite(row.pct) && Number.isFinite(row.quoteAt) && row.quoteAt > 0 &&
       row.quoteAt <= at && dayFormat.format(row.quoteAt) === date;
     const all = detail.allStocks.filter(valid);
     if (!all.length) return;
-    snapshot = { at, date, all, main: detail.stocks.filter(valid), source: detail.source,
+    stockSnapshot = { at, date, all, main: detail.stocks.filter(valid), source: detail.source,
       scanned: detail.scanned, total: detail.total, missingPages: detail.missingPages };
+    if (!scopeChosen) universe.value = "all";
     render();
   });
-  document.addEventListener("quant:market-health", ({ detail }) => { health = detail.state; if (!snapshot) render(); });
-  universe.addEventListener("change", render);
+
+  function acceptIndustry({ catalogue, rows }) {
+    const industryCodes = new Set(catalogue.boards.filter((board) => board.kind === "industry").map((board) => board.code));
+    const latestByCode = new Map();
+    const now = Date.now();
+    for (const row of rows) {
+      if (!industryCodes.has(row.f12) || row.f3 == null || String(row.f3).trim() === "") continue;
+      const value = Number(row.f3);
+      const at = Number(row.f124) * 1000;
+      if (!Number.isFinite(value) || !Number.isFinite(at) || at <= 0 || at > now + 5000 ||
+          now - at > 7 * 86400000 || at < (latestByCode.get(row.f12)?.at || 0)) continue;
+      latestByCode.set(row.f12, { pct: value, at });
+    }
+    const values = [...latestByCode.values()];
+    const at = Math.max(0, ...values.map((row) => row.at));
+    if (!at || at < (industrySnapshot?.at || 0)) return;
+    const date = dayFormat.format(at);
+    const all = values.filter((row) => dayFormat.format(row.at) === date);
+    industrySnapshot = { at, date, all, total: industryCodes.size, scanned: all.length };
+    if (!scopeChosen && !stockSnapshot && health === "error") universe.value = "industry";
+    if (universe.value === "industry") render();
+  }
+  const loadIndustry = () => window.QuantBoards.snapshot().then(acceptIndustry).catch(() => {});
+  document.addEventListener("quant:board-quotes-snapshot", ({ detail }) => acceptIndustry(detail));
+  document.addEventListener("quant:market-health", ({ detail }) => {
+    health = detail.state;
+    if (stockSnapshot) return;
+    if (health === "error" && !scopeChosen && industrySnapshot) universe.value = "industry";
+    if (health === "error" && !industrySnapshot && !market.hidden) loadIndustry();
+    render();
+  });
+  document.addEventListener("quant:view-changed", ({ detail }) => {
+    if (detail.id === "opportunity" && !stockSnapshot && health === "error" && !industrySnapshot) loadIndustry();
+  });
+  universe.addEventListener("change", () => {
+    scopeChosen = true;
+    if (universe.value === "industry" && !industrySnapshot) loadIndustry();
+    render();
+  });
   unit.addEventListener("change", render);
   render();
 })();

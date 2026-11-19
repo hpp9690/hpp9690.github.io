@@ -220,6 +220,8 @@
   font-variant-numeric: tabular-nums;
 }
 
+.terminal-market-turnover[hidden] { display: none; }
+
 .terminal-breadth-legend dt::before {
   display: inline-block;
   width: 6px;
