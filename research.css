@@ -112,29 +112,86 @@
   margin-bottom: 10px;
 }
 .sector-anomaly-toolbar p { margin: 0; color: var(--muted); font-size: 12px; }
-.sector-anomaly-toolbar > div { display: flex; gap: 9px; }
+.sector-anomaly-toolbar > div { display: flex; flex-wrap: wrap; gap: 8px; }
 .sector-anomaly-toolbar label { font-size: 12px; color: var(--muted); }
 .sector-anomaly-toolbar select { min-height: 32px; padding: 4px 7px; font-size: 12px; }
-.sector-anomaly-feed { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr)); gap: 8px; }
+.sector-anomaly-feed { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .sector-anomaly-feed .anomaly-empty { grid-column: 1 / -1; }
+.sector-summary {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.sector-summary h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.3;
+}
+.sector-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+}
+.sector-group-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-subtle);
+}
 .sector-alert-card {
   display: grid;
-  gap: 5px;
-  padding: 11px 13px;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 9px 11px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 11px;
   background: var(--surface-subtle);
   text-align: left;
 }
 .sector-alert-card:hover { background: var(--surface-hover); }
+.sector-group-card > .sector-group-primary { border: 0; background: transparent; }
+.sector-group-card > .sector-group-primary:hover { background: var(--surface-hover); }
+.sector-group-card > .sector-group-primary:focus-visible { outline-offset: -2px; }
 .sector-alert-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.sector-alert-top b { font-size: 15px; overflow-wrap: anywhere; }
+.sector-alert-top b { font-size: 14px; overflow-wrap: anywhere; }
 .sector-alert-top small, .sector-alert-detail { color: var(--muted); font-size: 11px; }
-.sector-alert-tag { margin-left: auto; padding: 3px 7px; border-radius: 8px; background: var(--surface-accent); color: var(--accent-strong); font-size: 11px; }
+.sector-alert-tag { margin-left: auto; padding: 3px 7px; border-radius: 8px; background: var(--surface-accent); color: var(--accent-strong); font-size: 11px; white-space: nowrap; }
 .sector-alert-card[data-direction="down"] .sector-alert-tag { background: var(--warning-surface); color: var(--warning); }
-.sector-alert-metrics { font-size: 12px; color: var(--muted); }
-.sector-alert-metrics b { color: var(--text); font-size: 15px; font-variant-numeric: tabular-nums; }
-.sector-alert-link { color: var(--accent-strong); font-size: 12px; }
+.sector-alert-metrics { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.sector-alert-metrics b { min-width: 0; color: var(--muted); font-weight: 650; overflow-wrap: anywhere; }
+.sector-alert-link { color: var(--accent-strong); font-size: 12px; white-space: nowrap; }
+.sector-group-details { border-top: 1px solid var(--line); }
+.sector-group-details > summary,
+.sector-summary-more > summary {
+  width: fit-content;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  cursor: pointer;
+}
+.sector-summary-more { grid-column: 1 / -1; }
+.sector-summary-more > summary { padding-inline: 2px; }
+.sector-summary-more > .sector-summary-grid { margin-top: 3px; }
+.sector-group-details > summary:hover,
+.sector-summary-more > summary:hover { text-decoration: underline; text-underline-offset: 2px; }
+.sector-group-details > summary:focus-visible,
+.sector-summary-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sector-group-members { display: grid; gap: 5px; padding: 0 7px 7px; }
+.sector-group-members .sector-alert-card { padding: 7px 9px; background: var(--surface); }
+.sector-group-members .sector-alert-card:hover { background: var(--surface-hover); }
+
+@media (min-width: 680px) {
+  .sector-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1220px) {
+  .sector-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 
 @media (max-width: 760px) {
   .stock-research-grid { grid-template-columns: minmax(0, 1fr); }
